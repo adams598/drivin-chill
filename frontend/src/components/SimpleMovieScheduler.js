@@ -31,7 +31,8 @@ const SimpleMovieScheduler = () => {
     capacity: 21
   });
 
-  const API = process.env.REACT_APP_BACKEND_URL || '';
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL?.replace(/\/+$/, '') || '';
+  const API = `${BACKEND_URL}/api`;
   const token = localStorage.getItem('admin_token');
   const headers = { 
     'Authorization': `Bearer ${token}`,
@@ -80,13 +81,13 @@ const SimpleMovieScheduler = () => {
       
       // Charger les films
       console.log('📡 GET /api/movies');
-      const moviesRes = await axios.get(`${API}/api/movies`, { headers });
+      const moviesRes = await axios.get(`${API}/movies`, { headers });
       console.log('✅ Films chargés:', moviesRes.data.length);
       setMovies(moviesRes.data.filter(m => m.is_active)); // Filtrer uniquement les films actifs
       
       // Charger les programmations
       console.log('📡 GET /api/movie-schedules');
-      const schedulesRes = await axios.get(`${API}/api/movie-schedules`, { headers });
+      const schedulesRes = await axios.get(`${API}/movie-schedules`, { headers });
       console.log('✅ Programmations chargées:', schedulesRes.data.length);
       setSchedules(schedulesRes.data);
       
@@ -122,11 +123,11 @@ const SimpleMovieScheduler = () => {
       
       if (editingMovie) {
         // Mise à jour
-        await axios.put(`${API}/api/movies/${editingMovie.id}`, data, { headers });
+        await axios.put(`${API}/movies/${editingMovie.id}`, data, { headers });
         toast.success('✅ Film modifié avec succès !');
       } else {
         // Création
-        await axios.post(`${API}/api/movies`, data, { headers });
+        await axios.post(`${API}/movies`, data, { headers });
         toast.success('✅ Film ajouté avec succès !');
       }
       
@@ -178,7 +179,7 @@ const SimpleMovieScheduler = () => {
     
     try {
       console.log('🗑️ Suppression film:', movieId);
-      await axios.delete(`${API}/api/movies/${movieId}`, { headers });
+      await axios.delete(`${API}/movies/${movieId}`, { headers });
       toast.success('Film supprimé');
       await loadData();
     } catch (error) {
@@ -211,7 +212,7 @@ const SimpleMovieScheduler = () => {
       console.log('📤 Envoi POST /api/movie-schedules');
       console.log('Données:', data);
       
-      await axios.post(`${API}/api/movie-schedules`, data, { 
+      await axios.post(`${API}/movie-schedules`, data, { 
         headers,
         timeout: 10000
       });
@@ -247,7 +248,7 @@ const SimpleMovieScheduler = () => {
     
     try {
       console.log('🗑️ Suppression:', scheduleId);
-      await axios.delete(`${API}/api/movie-schedules/${scheduleId}`, { headers });
+      await axios.delete(`${API}/movie-schedules/${scheduleId}`, { headers });
       toast.success('Programmation supprimée');
       await loadData();
     } catch (error) {
