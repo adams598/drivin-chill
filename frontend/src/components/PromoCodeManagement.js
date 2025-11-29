@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { format, startOfDay } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL?.replace(/\/+$/, '') || '';
 const API = `${BACKEND_URL}/api`;
 
 const PROMO_TYPES = [

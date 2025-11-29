@@ -1624,7 +1624,15 @@ async def create_promo_code(promo_data: PromoCodeCreate, admin = Depends(get_adm
             raise HTTPException(status_code=400, detail="Type de code promo invalide")
         
         # Create new promo code
-        new_code = PromoCode(**promo_data.dict())
+        promo_dict = promo_data.dict()
+        promo_dict.update({
+            "id": str(uuid.uuid4()),
+            "is_active": True,
+            "current_usage": 0,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        })
+        new_code = PromoCode(**promo_dict)
         await db.promo_codes.insert_one(prepare_for_mongo(new_code.dict()))
         return new_code
         
