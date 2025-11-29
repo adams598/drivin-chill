@@ -1179,7 +1179,7 @@ function App() {
           className={`min-h-screen ${
             isHalloween
               ? "bg-gradient-to-br from-orange-800 via-red-900 to-black"
-              : "bg-gray-900"
+              : "bg-white"
           }`}
         >
           {/* Halloween Banner */}
@@ -1348,25 +1348,25 @@ function App() {
             )}
 
             <div
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+              className="absolute inset-0 bg-cover bg-center bg-no-repeat image-overlay"
               style={{
-                backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.5)), url(${HERO_IMAGES[0]})`,
+                backgroundImage: `url(${HERO_IMAGES[0]})`,
               }}
             />
 
-            <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-              <div className="text-center">
+            <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 md:py-32">
+              <div className="text-center animate-fade-in-up">
                 <img
                   src={LOGO_URL}
                   alt="Drivin And Chill Logo"
-                  className="mx-auto h-32 w-32 mb-8 object-contain"
+                  className="mx-auto h-24 w-24 mb-8 object-contain opacity-90"
                 />
 
-                <h1 className="text-6xl font-bold text-white mb-6 font-serif tracking-wide">
-                  DRIVIN AND CHILL
+                <h1 className="text-5xl md:text-6xl lg:text-7xl font-light text-blue-night mb-6 tracking-tight leading-tight hero-title">
+                  Drivin And Chill
                 </h1>
 
-                <p className="text-xl text-gray-200 mb-8 max-w-3xl mx-auto leading-relaxed">
+                <p className="text-lg md:text-xl text-gray-dark mb-10 max-w-2xl mx-auto leading-relaxed font-light hero-subtitle">
                   Vivez une expérience unique à Limoges : un cinéma drive-in en
                   plein air, où vous profiterez du film directement depuis votre
                   voiture !
@@ -1374,13 +1374,13 @@ function App() {
 
                 <Button
                   onClick={() => setCurrentStep("booking")}
-                  className={`px-12 py-4 text-lg rounded-full font-semibold shadow-2xl transform hover:scale-105 transition-all duration-300 ${
+                  className={`px-10 py-5 text-base rounded-lg font-normal shadow-sm hover:shadow-md transition-all duration-200 ${
                     isHalloween
                       ? "bg-gradient-to-r from-orange-600 to-purple-600 hover:from-orange-700 hover:to-purple-700 text-white border-2 border-orange-400"
-                      : "bg-blue-600 hover:bg-blue-700 text-white"
+                      : "bg-blue-night hover:bg-blue-night-light text-white"
                   }`}
                 >
-                  <Film className="mr-2 h-6 w-6" />
+                  <Film className="mr-2 h-5 w-5" />
                   Réserver votre séance
                 </Button>
               </div>
@@ -1388,7 +1388,7 @@ function App() {
           </div>
 
           {/* Événements spéciaux */}
-          <div className="py-20 bg-gray-900 border-t-4 border-purple-500">
+          <div className="py-20 md:py-24 bg-gray-soft section-padding">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <EventsDisplay
                 onEventSelect={handleMovieFromCarousel}
@@ -1398,7 +1398,7 @@ function App() {
           </div>
 
           {/* Films à l'affiche - Carrousel hebdomadaire */}
-          <div className="py-20 bg-gray-800 border-t-4 border-blue-500">
+          <div className="py-20 md:py-24 bg-white section-padding">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <WeeklyMoviesCarousel
                 onMovieSelect={handleMovieFromCarousel}
@@ -1408,62 +1408,66 @@ function App() {
           </div>
 
           {/* Features Section */}
-          <div className="py-20 bg-gray-800">
+          <div className="py-20 md:py-24 bg-white section-padding">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <h2 className="text-4xl font-bold text-center text-white mb-16 font-serif">
+              <h2 className="text-3xl md:text-4xl font-light text-center text-blue-night mb-16 tracking-tight">
                 L'expérience Drive-In
               </h2>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                <Card className="bg-gray-700 border-gray-600 hover:bg-gray-600 transition-all duration-300 group">
-                  <CardHeader className="text-center">
-                    <Radio className="mx-auto h-12 w-12 text-blue-400 mb-4 group-hover:scale-110 transition-transform" />
-                    <CardTitle className="text-white">Son FM</CardTitle>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
+                <Card className="bg-white border border-gray-light hover:border-blue-night/20 transition-all duration-300 group card-hover shadow-sm hover:shadow-md">
+                  <CardHeader className="text-center pb-4">
+                    <Radio className="mx-auto h-10 w-10 text-blue-night mb-4 group-hover:scale-105 transition-transform" />
+                    <CardTitle className="text-blue-night font-normal text-lg">
+                      Son FM
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-gray-300 text-center">
-                      📡 Son diffusé via fréquence FM - clarté garantie depuis
-                      votre autoradio !
+                    <p className="text-gray-dark text-center text-sm leading-relaxed font-light">
+                      Son diffusé via fréquence FM - clarté garantie depuis
+                      votre autoradio
                     </p>
                   </CardContent>
                 </Card>
 
-                <Card className="bg-gray-700 border-gray-600 hover:bg-gray-600 transition-all duration-300 group">
-                  <CardHeader className="text-center">
-                    <Popcorn className="mx-auto h-12 w-12 text-yellow-400 mb-4 group-hover:scale-110 transition-transform" />
-                    <CardTitle className="text-white">Snacking</CardTitle>
+                <Card className="bg-white border border-gray-light hover:border-green-soft/30 transition-all duration-300 group card-hover shadow-sm hover:shadow-md">
+                  <CardHeader className="text-center pb-4">
+                    <Popcorn className="mx-auto h-10 w-10 text-green-soft mb-4 group-hover:scale-105 transition-transform" />
+                    <CardTitle className="text-blue-night font-normal text-lg">
+                      Snacking
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-gray-300 text-center">
-                      🍿 Snacking sur place : popcorn chaud, boissons
-                      fraîches...
+                    <p className="text-gray-dark text-center text-sm leading-relaxed font-light">
+                      Snacking sur place : popcorn chaud, boissons fraîches
                     </p>
                   </CardContent>
                 </Card>
 
-                <Card className="bg-gray-700 border-gray-600 hover:bg-gray-600 transition-all duration-300 group">
-                  <CardHeader className="text-center">
-                    <Smartphone className="mx-auto h-12 w-12 text-green-400 mb-4 group-hover:scale-110 transition-transform" />
-                    <CardTitle className="text-white">Commande QR</CardTitle>
+                <Card className="bg-white border border-gray-light hover:border-blue-night/20 transition-all duration-300 group card-hover shadow-sm hover:shadow-md">
+                  <CardHeader className="text-center pb-4">
+                    <Smartphone className="mx-auto h-10 w-10 text-blue-night mb-4 group-hover:scale-105 transition-transform" />
+                    <CardTitle className="text-blue-night font-normal text-lg">
+                      Commande QR
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-gray-300 text-center">
-                      📱 Commandes via QR code directement depuis votre voiture.
+                    <p className="text-gray-dark text-center text-sm leading-relaxed font-light">
+                      Commandes via QR code directement depuis votre voiture
                     </p>
                   </CardContent>
                 </Card>
 
-                <Card className="bg-gray-700 border-gray-600 hover:bg-gray-600 transition-all duration-300 group">
-                  <CardHeader className="text-center">
-                    <Euro className="mx-auto h-12 w-12 text-red-400 mb-4 group-hover:scale-110 transition-transform" />
-                    <CardTitle className="text-white">
+                <Card className="bg-white border border-gray-light hover:border-orange-soft/30 transition-all duration-300 group card-hover shadow-sm hover:shadow-md">
+                  <CardHeader className="text-center pb-4">
+                    <Euro className="mx-auto h-10 w-10 text-orange-soft mb-4 group-hover:scale-105 transition-transform" />
+                    <CardTitle className="text-blue-night font-normal text-lg">
                       17€ par voiture
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-gray-300 text-center">
-                      💲 Viens à deux, trois ou plus c'est toujours le même prix
-                      ! 😼
+                    <p className="text-gray-dark text-center text-sm leading-relaxed font-light">
+                      Viens à deux, trois ou plus c'est toujours le même prix
                     </p>
                   </CardContent>
                 </Card>
@@ -1472,75 +1476,83 @@ function App() {
           </div>
 
           {/* Schedule Section */}
-          <div className="py-20 bg-gray-900">
+          <div className="py-20 md:py-24 bg-gray-soft section-padding">
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-              <h2 className="text-4xl font-bold text-center text-white mb-16 font-serif">
+              <h2 className="text-3xl md:text-4xl font-light text-center text-blue-night mb-16 tracking-tight">
                 Nos créneaux
               </h2>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <Card className="bg-orange-800 border-orange-600 hover:bg-orange-700 transition-all duration-300">
-                  <CardHeader className="text-center">
-                    <Clock className="mx-auto h-12 w-12 text-orange-200 mb-4" />
-                    <CardTitle className="text-white text-2xl">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+                <Card className="bg-white border border-orange-soft/20 hover:border-orange-soft/40 transition-all duration-300 card-hover shadow-sm hover:shadow-md">
+                  <CardHeader className="text-center pb-4">
+                    <Clock className="mx-auto h-10 w-10 text-orange-soft mb-4" />
+                    <CardTitle className="text-blue-night text-xl font-normal">
                       Première séance
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="text-center">
-                    <p className="text-orange-100 text-lg mb-2">
+                  <CardContent className="text-center space-y-2">
+                    <p className="text-gray-dark text-base font-light">
                       Entrée :{" "}
-                      {timeSlotSettings?.first_slot_entry_time || "20h45"}
+                      <span className="font-normal">
+                        {timeSlotSettings?.first_slot_entry_time || "20h45"}
+                      </span>
                     </p>
-                    <p className="text-orange-100 text-lg">
+                    <p className="text-gray-dark text-base font-light">
                       Diffusion :{" "}
-                      {timeSlotSettings?.first_slot_start_time || "21h00"}
+                      <span className="font-normal">
+                        {timeSlotSettings?.first_slot_start_time || "21h00"}
+                      </span>
                     </p>
                   </CardContent>
                 </Card>
 
-                <Card className="bg-purple-800 border-purple-600 hover:bg-purple-700 transition-all duration-300">
-                  <CardHeader className="text-center">
-                    <Moon className="mx-auto h-12 w-12 text-purple-200 mb-4" />
-                    <CardTitle className="text-white text-2xl">
+                <Card className="bg-white border border-blue-night/20 hover:border-blue-night/40 transition-all duration-300 card-hover shadow-sm hover:shadow-md">
+                  <CardHeader className="text-center pb-4">
+                    <Moon className="mx-auto h-10 w-10 text-blue-night mb-4" />
+                    <CardTitle className="text-blue-night text-xl font-normal">
                       Seconde séance
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="text-center">
-                    <p className="text-purple-100 text-lg mb-2">
+                  <CardContent className="text-center space-y-2">
+                    <p className="text-gray-dark text-base font-light">
                       Entrée :{" "}
-                      {timeSlotSettings?.second_slot_entry_time || "23h15"}
+                      <span className="font-normal">
+                        {timeSlotSettings?.second_slot_entry_time || "23h15"}
+                      </span>
                     </p>
-                    <p className="text-purple-100 text-lg">
+                    <p className="text-gray-dark text-base font-light">
                       Diffusion :{" "}
-                      {timeSlotSettings?.second_slot_start_time || "23h30"}
+                      <span className="font-normal">
+                        {timeSlotSettings?.second_slot_start_time || "23h30"}
+                      </span>
                     </p>
                   </CardContent>
                 </Card>
               </div>
 
-              <p className="text-center text-gray-300 mt-8 text-lg">
+              <p className="text-center text-gray-medium mt-10 text-base font-light">
                 Les séances peuvent se dérouler{" "}
-                <strong>tous les jours de la semaine</strong>
+                <span className="font-normal">
+                  tous les jours de la semaine
+                </span>
               </p>
 
               {/* Booking Rules Notice */}
-              <div className="bg-blue-900 border border-blue-600 rounded-lg p-6 mt-8 max-w-2xl mx-auto">
-                <h4 className="text-blue-100 font-bold text-lg mb-3 text-center flex items-center justify-center">
-                  <Clock className="mr-2 h-5 w-5" />⏰ Nouvelle règle de
-                  réservation
+              <div className="bg-blue-night/5 border border-blue-night/20 rounded-xl p-6 md:p-8 mt-10 max-w-2xl mx-auto">
+                <h4 className="text-blue-night font-normal text-lg mb-4 text-center flex items-center justify-center">
+                  <Clock className="mr-2 h-5 w-5" />
+                  Nouvelle règle de réservation
                 </h4>
-                <div className="text-center space-y-2">
-                  <p className="text-blue-100 text-base font-semibold">
-                    🔒 Les réservations ferment automatiquement{" "}
-                    <span className="text-yellow-300">
-                      8h avant chaque séance
-                    </span>
+                <div className="text-center space-y-3">
+                  <p className="text-blue-night text-base font-light">
+                    Les réservations ferment automatiquement{" "}
+                    <span className="font-normal">8h avant chaque séance</span>
                   </p>
-                  <p className="text-blue-200 text-sm">
+                  <p className="text-gray-dark text-sm font-light leading-relaxed">
                     Cette mesure nous permet de mieux organiser les séances et
                     d'assurer la meilleure expérience possible.
                   </p>
-                  <p className="text-blue-300 text-xs">
+                  <p className="text-gray-medium text-xs font-light">
                     Pensez à réserver à l'avance ! Les places étant limitées (21
                     voitures), nous recommandons de réserver dès que possible.
                   </p>
@@ -1550,26 +1562,28 @@ function App() {
           </div>
 
           {/* Location Section */}
-          <div className="py-16 bg-gray-800">
+          <div className="py-16 md:py-20 bg-white">
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-              <MapPin className="mx-auto h-16 w-16 text-blue-400 mb-6" />
-              <h3 className="text-2xl font-bold text-white mb-4">
+              <MapPin className="mx-auto h-12 w-12 text-blue-night mb-6" />
+              <h3 className="text-2xl font-light text-blue-night mb-4 tracking-tight">
                 Notre adresse
               </h3>
-              <p className="text-gray-300 text-lg">
-                <strong>10 rue de dion bouton, 87280 Limoges</strong>
+              <p className="text-gray-dark text-lg font-light">
+                <span className="font-normal">
+                  10 rue de dion bouton, 87280 Limoges
+                </span>
               </p>
             </div>
           </div>
 
           {/* Weather Info */}
-          <div className="py-16 bg-gray-900">
+          <div className="py-16 md:py-20 bg-gray-soft">
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-              <CloudRain className="mx-auto h-16 w-16 text-blue-400 mb-6" />
-              <h3 className="text-2xl font-bold text-white mb-4">
+              <CloudRain className="mx-auto h-12 w-12 text-blue-night mb-6" />
+              <h3 className="text-2xl font-light text-blue-night mb-6 tracking-tight">
                 Politique météo
               </h3>
-              <p className="text-gray-300 text-lg leading-relaxed">
+              <p className="text-gray-dark text-base leading-relaxed font-light max-w-2xl mx-auto">
                 En cas de pluie, le film sera tout de même diffusé tant que la
                 sécurité le permet. Le son sortant directement des véhicules,
                 les essuie-glaces ne gâchent rien à l'expérience. En cas de
@@ -1580,13 +1594,13 @@ function App() {
           </div>
 
           {/* Contact Section */}
-          <div className="py-16 bg-gradient-to-r from-purple-900 to-blue-900">
+          <div className="py-16 md:py-20 bg-white">
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-              <Instagram className="mx-auto h-16 w-16 text-white mb-6" />
-              <h3 className="text-2xl font-bold text-white mb-4">
+              <Instagram className="mx-auto h-12 w-12 text-blue-night mb-6" />
+              <h3 className="text-2xl font-light text-blue-night mb-4 tracking-tight">
                 Une question ? Contactez-nous !
               </h3>
-              <p className="text-gray-200 text-lg mb-8 leading-relaxed">
+              <p className="text-gray-dark text-base mb-8 leading-relaxed font-light max-w-2xl mx-auto">
                 Notre équipe est disponible pour répondre à toutes vos questions
                 via Instagram. Réponse rapide garantie !
               </p>
@@ -1595,12 +1609,12 @@ function App() {
                   href="https://www.instagram.com/drivinnchill/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-8 py-4 rounded-full font-semibold text-lg shadow-xl transform hover:scale-105 transition-all duration-300"
+                  className="inline-flex items-center bg-blue-night hover:bg-blue-night-light text-white px-8 py-4 rounded-lg font-normal text-base shadow-sm hover:shadow-md transition-all duration-200"
                 >
-                  <Instagram className="mr-3 h-6 w-6" />
+                  <Instagram className="mr-3 h-5 w-5" />
                   Contacter @drivinnchill
                 </a>
-                <p className="text-gray-300 text-sm">
+                <p className="text-gray-medium text-sm font-light">
                   Cliquez pour ouvrir une conversation directe avec
                   @drivinnchill
                 </p>
@@ -1609,55 +1623,57 @@ function App() {
           </div>
 
           {/* CTA Section */}
-          <div className="py-20 bg-gray-800">
+          <div className="py-20 md:py-24 bg-blue-night/5">
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-              <h2 className="text-4xl font-bold text-white mb-8 font-serif">
+              <h2 className="text-3xl md:text-4xl font-light text-blue-night mb-6 tracking-tight">
                 Prêt pour l'aventure ?
               </h2>
-              <p className="text-xl text-gray-300 mb-12">
+              <p className="text-base md:text-lg text-gray-dark mb-10 font-light max-w-2xl mx-auto">
                 Réservez dès maintenant votre place pour une soirée cinéma
                 inoubliable sous les étoiles !
               </p>
               <Button
                 onClick={() => setCurrentStep("booking")}
-                className={`px-16 py-6 text-xl rounded-full font-bold shadow-2xl transform hover:scale-110 transition-all duration-300 ${
+                className={`px-10 py-5 text-base rounded-lg font-normal shadow-sm hover:shadow-md transition-all duration-200 ${
                   isHalloween
                     ? "bg-gradient-to-r from-orange-600 via-red-600 to-purple-600 hover:from-orange-700 hover:via-red-700 hover:to-purple-700 text-white border-2 border-orange-500"
-                    : "bg-red-600 hover:bg-red-700 text-white"
+                    : "bg-blue-night hover:bg-blue-night-light text-white"
                 }`}
               >
-                <Film className="mr-3 h-7 w-7" />
+                <Film className="mr-3 h-5 w-5" />
                 Je réserve maintenant !
               </Button>
             </div>
           </div>
 
           {/* Footer */}
-          <footer className="bg-gray-900 border-t border-gray-700">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+          <footer className="bg-blue-night border-t border-gray-light">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-8 md:gap-12">
                 <div className="space-y-4">
                   <img
                     src={LOGO_URL}
                     alt="Drivin And Chill Logo"
-                    className="h-16 w-16 object-contain"
+                    className="h-12 w-12 object-contain opacity-90"
                   />
-                  <h3 className="text-white font-bold text-lg">
+                  <h3 className="text-white font-normal text-lg tracking-tight">
                     Drivin And Chill
                   </h3>
-                  <p className="text-gray-400 text-sm">
+                  <p className="text-white/70 text-sm font-light">
                     Cinéma drive-in unique à Limoges
                   </p>
                 </div>
 
                 <div className="space-y-4">
-                  <h4 className="text-white font-semibold">Contact</h4>
-                  <div className="space-y-2 text-sm">
-                    <p className="text-gray-400 flex items-center">
+                  <h4 className="text-white font-normal text-base tracking-tight">
+                    Contact
+                  </h4>
+                  <div className="space-y-3 text-sm">
+                    <p className="text-white/70 font-light flex items-center">
                       <MapPin className="mr-2 h-4 w-4" />
                       10 rue de dion bouton, 87280 Limoges
                     </p>
-                    <p className="text-gray-400 flex items-center">
+                    <p className="text-white/70 font-light flex items-center">
                       <Mail className="mr-2 h-4 w-4" />
                       semih.adresse@gmail.com
                     </p>
@@ -1665,7 +1681,7 @@ function App() {
                       href="https://instagram.com/drivinnchill"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-gray-400 hover:text-white flex items-center transition-colors"
+                      className="text-white/70 hover:text-white flex items-center transition-colors font-light"
                     >
                       <Instagram className="mr-2 h-4 w-4" />
                       @drivinnchill
@@ -1674,7 +1690,7 @@ function App() {
                       href="https://www.instagram.com/drivinnchill/"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-400 hover:text-blue-300 flex items-center transition-colors text-sm"
+                      className="text-white/80 hover:text-white flex items-center transition-colors text-sm font-light"
                     >
                       💬 DM @drivinnchill
                     </a>
@@ -1682,23 +1698,25 @@ function App() {
                 </div>
 
                 <div className="space-y-4">
-                  <h4 className="text-white font-semibold">Services</h4>
+                  <h4 className="text-white font-normal text-base tracking-tight">
+                    Services
+                  </h4>
                   <div className="space-y-2 text-sm">
                     <button
                       onClick={() => setCurrentStep("popular-movies")}
-                      className="text-gray-400 hover:text-white transition-colors block"
+                      className="text-white/70 hover:text-white transition-colors block font-light text-left"
                     >
-                      🏆 Films Populaires
+                      Films Populaires
                     </button>
                     <button
                       onClick={() => setIsSuggestionModalOpen(true)}
-                      className="text-gray-400 hover:text-yellow-300 transition-colors block"
+                      className="text-white/70 hover:text-white transition-colors block font-light text-left"
                     >
-                      💡 Suggérer un film
+                      Suggérer un film
                     </button>
                     <button
                       onClick={() => setCurrentStep("partners")}
-                      className="text-gray-400 hover:text-white transition-colors block"
+                      className="text-white/70 hover:text-white transition-colors block font-light text-left"
                     >
                       Espace Partenaire
                     </button>
@@ -1708,7 +1726,7 @@ function App() {
                         setShowAdminLoginDialog(true);
                         console.log("showAdminLoginDialog devrait être true");
                       }}
-                      className="text-gray-400 hover:text-white transition-colors block"
+                      className="text-white/70 hover:text-white transition-colors block font-light text-left"
                     >
                       Administration
                     </button>
@@ -1716,17 +1734,19 @@ function App() {
                 </div>
 
                 <div className="space-y-4">
-                  <h4 className="text-white font-semibold">Légal</h4>
+                  <h4 className="text-white font-normal text-base tracking-tight">
+                    Légal
+                  </h4>
                   <div className="space-y-2 text-sm">
                     <button
                       onClick={() => setCurrentStep("mentions")}
-                      className="text-gray-400 hover:text-white transition-colors block"
+                      className="text-white/70 hover:text-white transition-colors block font-light text-left"
                     >
                       Mentions Légales
                     </button>
                     <button
                       onClick={() => setCurrentStep("cgv")}
-                      className="text-gray-400 hover:text-white transition-colors block"
+                      className="text-white/70 hover:text-white transition-colors block font-light text-left"
                     >
                       Conditions Générales de Vente
                     </button>
@@ -1734,8 +1754,8 @@ function App() {
                 </div>
               </div>
 
-              <div className="border-t border-gray-700 mt-8 pt-8 text-center">
-                <p className="text-gray-400 text-sm">
+              <div className="border-t border-white/10 mt-10 pt-8 text-center">
+                <p className="text-white/60 text-sm font-light">
                   © 2025 Drivin And Chill - Ozturk Semih. Tous droits réservés.
                 </p>
               </div>
@@ -1754,38 +1774,40 @@ function App() {
 
   if (currentStep === "booking") {
     return (
-      <div className="min-h-screen bg-gray-900 py-8">
+      <div className="min-h-screen bg-white py-8 md:py-12">
         <Toaster />
 
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-8">
+          <div className="text-center mb-10">
             <img
               src={LOGO_URL}
               alt="Drivin And Chill Logo"
-              className="mx-auto h-16 w-16 mb-4 object-contain"
+              className="mx-auto h-14 w-14 mb-6 object-contain opacity-90"
             />
-            <h1 className="text-3xl font-bold text-white mb-2">Réservation</h1>
-            <p className="text-gray-400">
+            <h1 className="text-3xl md:text-4xl font-light text-blue-night mb-3 tracking-tight">
+              Réservation
+            </h1>
+            <p className="text-gray-dark font-light">
               Complétez votre réservation en quelques étapes
             </p>
           </div>
 
           {/* Indicateur de pré-remplissage */}
           {selectedDate && selectedTimeSlot && selectedMovie && (
-            <Card className="bg-green-900 border-green-700 mb-4">
-              <CardContent className="p-4">
-                <div className="text-center text-green-100">
-                  <div className="flex items-center justify-center mb-2">
-                    <Film className="mr-2 h-5 w-5" />
-                    <span className="font-semibold">
+            <Card className="bg-green-soft/10 border border-green-soft/30 mb-6 card-hover">
+              <CardContent className="p-5">
+                <div className="text-center">
+                  <div className="flex items-center justify-center mb-3">
+                    <Film className="mr-2 h-5 w-5 text-green-soft" />
+                    <span className="font-normal text-green-soft">
                       Sélection automatique depuis l'affiche du jour
                     </span>
                   </div>
-                  <p className="text-sm">
-                    📅 {format(selectedDate, "EEEE d MMMM", { locale: fr })} •
-                    🕐 {selectedTimeSlot} • 🎬 {selectedMovie.title}
+                  <p className="text-sm text-gray-dark font-light">
+                    {format(selectedDate, "EEEE d MMMM", { locale: fr })} •{" "}
+                    {selectedTimeSlot} • {selectedMovie.title}
                   </p>
-                  <p className="text-xs text-green-200 mt-1">
+                  <p className="text-xs text-gray-medium mt-2 font-light">
                     Vous pouvez modifier ces informations si nécessaire
                   </p>
                 </div>
@@ -1797,14 +1819,14 @@ function App() {
             className={`${
               isHalloween
                 ? "bg-gradient-to-br from-orange-900/70 to-purple-900/70 border-orange-600"
-                : "bg-gray-800 border-gray-700"
+                : "bg-white border border-gray-light shadow-sm"
             } transition-all duration-300`}
           >
             <CardHeader>
               <CardTitle
                 className={`${
-                  isHalloween ? "text-orange-200" : "text-white"
-                } text-xl`}
+                  isHalloween ? "text-orange-200" : "text-blue-night"
+                } text-xl font-light tracking-tight`}
               >
                 Informations de réservation
               </CardTitle>
@@ -1812,12 +1834,14 @@ function App() {
             <CardContent className="space-y-6">
               {/* Date Selection */}
               <div className="space-y-2">
-                <Label className="text-white">Date de la séance *</Label>
+                <Label className="text-blue-night font-normal">
+                  Date de la séance *
+                </Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
-                      className="w-full justify-start text-left font-normal bg-gray-700 border-gray-600 text-white hover:bg-gray-600"
+                      className="w-full justify-start text-left font-light bg-white border-gray-light text-gray-dark hover:bg-gray-soft custom-input"
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
                       {selectedDate
@@ -1826,7 +1850,7 @@ function App() {
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent
-                    className="w-auto p-0 bg-gray-800 border-gray-600"
+                    className="w-auto p-0 bg-white border-gray-light"
                     align="start"
                   >
                     <Calendar
@@ -1842,7 +1866,7 @@ function App() {
                     />
                   </PopoverContent>
                 </Popover>
-                <p className="text-sm text-gray-400">
+                <p className="text-sm text-gray-medium font-light">
                   {preFillData && preFillData.isEvent
                     ? "Les événements peuvent avoir lieu n'importe quel jour de la semaine"
                     : "Les séances peuvent avoir lieu tous les jours de la semaine"}
@@ -1851,15 +1875,17 @@ function App() {
 
               {/* Time Slot Selection */}
               <div className="space-y-2">
-                <Label className="text-white">Créneau horaire *</Label>
+                <Label className="text-blue-night font-normal">
+                  Créneau horaire *
+                </Label>
                 <Select
                   value={selectedTimeSlot}
                   onValueChange={handleTimeSlotSelect}
                 >
-                  <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                  <SelectTrigger className="bg-white border-gray-light text-gray-dark custom-input">
                     <SelectValue placeholder="Choisir un créneau" />
                   </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-600">
+                  <SelectContent className="bg-white border-gray-light">
                     {movieSchedules.length > 0 || isPreFilled ? (
                       // Show actual schedules if available
                       movieSchedules.length > 0 ? (
@@ -1874,25 +1900,25 @@ function App() {
                             <SelectItem
                               key={schedule.schedule.id}
                               value={schedule.schedule.time_slot}
-                              className={`text-white hover:bg-gray-700 ${
+                              className={`text-gray-dark hover:bg-gray-soft ${
                                 isBookingClosed ? "opacity-50" : ""
                               }`}
                               disabled={isBookingClosed}
                             >
                               <div>
-                                <div className="font-medium">
+                                <div className="font-normal">
                                   {getTimeSlotDisplay(
                                     schedule.schedule.time_slot
                                   )}
                                 </div>
-                                <div className="text-sm text-gray-300">
+                                <div className="text-sm text-gray-medium">
                                   {isHalloween
                                     ? mapTimeSlotToHalloween(
                                         schedule.schedule.time_slot
                                       )
                                     : schedule.schedule.time_slot}
                                 </div>
-                                <div className="text-sm text-gray-400">
+                                <div className="text-sm text-gray-medium">
                                   {
                                     getTimeSlots().find(
                                       (slot) =>
@@ -1901,11 +1927,11 @@ function App() {
                                     )?.label
                                   }
                                 </div>
-                                <div className="text-sm font-medium text-blue-400 mt-1">
+                                <div className="text-sm font-normal text-blue-night mt-1">
                                   🎬 {schedule.movie.title}
                                 </div>
                                 {isBookingClosed && (
-                                  <div className="text-sm text-red-400 mt-1">
+                                  <div className="text-sm text-red-500 mt-1">
                                     {closureReason === "booking_closed_8h" &&
                                       "🔒 Réservations fermées (moins de 8h)"}
                                     {closureReason === "show_has_passed" &&
@@ -1916,7 +1942,7 @@ function App() {
                                 )}
                                 {availability &&
                                   availability.is_booking_open && (
-                                    <div className="text-sm text-green-400 mt-1">
+                                    <div className="text-sm text-green-soft mt-1">
                                       ✅ {availability.available_spots} places
                                       disponibles
                                       {availability.hours_until_show > 24 &&

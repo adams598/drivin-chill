@@ -1,14 +1,24 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
 body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
         "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
         "Helvetica Neue", sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-weight: 300;
+    letter-spacing: -0.01em;
 }
 
 code {
@@ -16,71 +26,105 @@ code {
         monospace;
 }
 
-
+html {
+  scroll-behavior: smooth;
+}
 
 @layer base {
   :root {
         --background: 0 0% 100%;
-        --foreground: 0 0% 3.9%;
+        --foreground: 215 25% 15%;
         --card: 0 0% 100%;
-        --card-foreground: 0 0% 3.9%;
+        --card-foreground: 215 25% 15%;
         --popover: 0 0% 100%;
-        --popover-foreground: 0 0% 3.9%;
-        --primary: 0 0% 9%;
-        --primary-foreground: 0 0% 98%;
-        --secondary: 0 0% 96.1%;
-        --secondary-foreground: 0 0% 9%;
-        --muted: 0 0% 96.1%;
-        --muted-foreground: 0 0% 45.1%;
-        --accent: 0 0% 96.1%;
-        --accent-foreground: 0 0% 9%;
+        --popover-foreground: 215 25% 15%;
+        --primary: 215 100% 50%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 210 20% 98%;
+        --secondary-foreground: 215 25% 15%;
+        --muted: 210 20% 98%;
+        --muted-foreground: 215 20% 45%;
+        --accent: 215 100% 50%;
+        --accent-foreground: 0 0% 100%;
         --destructive: 0 84.2% 60.2%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 89.8%;
-        --input: 0 0% 89.8%;
-        --ring: 0 0% 3.9%;
-        --chart-1: 12 76% 61%;
-        --chart-2: 173 58% 39%;
-        --chart-3: 197 37% 24%;
-        --chart-4: 43 74% 66%;
-        --chart-5: 27 87% 67%;
-        --radius: 0.5rem;
-    }
-  .dark {
-        --background: 0 0% 3.9%;
-        --foreground: 0 0% 98%;
-        --card: 0 0% 3.9%;
-        --card-foreground: 0 0% 98%;
-        --popover: 0 0% 3.9%;
-        --popover-foreground: 0 0% 98%;
-        --primary: 0 0% 98%;
-        --primary-foreground: 0 0% 9%;
-        --secondary: 0 0% 14.9%;
-        --secondary-foreground: 0 0% 98%;
-        --muted: 0 0% 14.9%;
-        --muted-foreground: 0 0% 63.9%;
-        --accent: 0 0% 14.9%;
-        --accent-foreground: 0 0% 98%;
-        --destructive: 0 62.8% 30.6%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 14.9%;
-        --input: 0 0% 14.9%;
-        --ring: 0 0% 83.1%;
-        --chart-1: 220 70% 50%;
-        --chart-2: 160 60% 45%;
-        --chart-3: 30 80% 55%;
-        --chart-4: 280 65% 60%;
-        --chart-5: 340 75% 55%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 210 20% 90%;
+        --input: 210 20% 96%;
+        --ring: 215 100% 50%;
+        --chart-1: 215 100% 50%;
+        --chart-2: 142 76% 45%;
+        --chart-3: 25 95% 55%;
+        --chart-4: 197 37% 24%;
+        --chart-5: 43 74% 66%;
+        --radius: 0.75rem;
+        
+        /* Custom colors - épurées et digestes */
+        --blue-night: 215 50% 20%;
+        --blue-night-light: 215 40% 30%;
+        --green-soft: 142 40% 55%;
+        --orange-soft: 25 85% 60%;
+        --white-dominant: 0 0% 100%;
+        --gray-soft: 210 15% 96%;
+        --gray-light: 210 10% 88%;
+        --gray-medium: 215 15% 65%;
+        --gray-dark: 215 20% 35%;
     }
 }
 
+/* Classes utilitaires pour les couleurs personnalisées */
+.bg-blue-night {
+  background-color: hsl(215, 50%, 20%);
+}
 
+.text-blue-night {
+  color: hsl(215, 50%, 20%);
+}
+
+.bg-gray-soft {
+  background-color: hsl(210, 15%, 96%);
+}
+
+.text-gray-dark {
+  color: hsl(215, 20%, 35%);
+}
+
+.text-gray-medium {
+  color: hsl(215, 15%, 65%);
+}
+
+.border-gray-light {
+  border-color: hsl(210, 10%, 88%);
+}
+
+.text-green-soft {
+  color: hsl(142, 40%, 55%);
+}
+
+.bg-green-soft\/10 {
+  background-color: hsla(142, 40%, 55%, 0.1);
+}
+
+.border-green-soft\/30 {
+  border-color: hsla(142, 40%, 55%, 0.3);
+}
+
+.text-orange-soft {
+  color: hsl(25, 85%, 60%);
+}
+
+.bg-blue-night\/5 {
+  background-color: hsla(215, 50%, 20%, 0.05);
+}
+
+.bg-blue-night-light {
+  background-color: hsl(215, 40%, 30%);
+}
 
 @layer base {
   * {
     @apply border-border;
     }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-white text-[hsl(var(--foreground))];
     }
 }

@@ -176,3 +176,5 @@ Pour forcer un nouveau déploiement :
 Votre frontend React est maintenant déployé sur Netlify avec votre domaine OVH. Les déploiements se feront automatiquement à chaque push sur GitHub.
 
 
+
+
