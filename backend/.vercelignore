@@ -1,0 +1,13 @@
+# Fichiers à ignorer lors du déploiement Vercel
+.env
+*.pyc
+__pycache__/
+venv/
+env/
+*.log
+.DS_Store
+migrate_database.py
+README*.md
+*.bat
+*.sh
+
