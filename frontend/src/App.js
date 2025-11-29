@@ -69,10 +69,12 @@ import WeeklyMoviesCarousel from "./components/WeeklyMoviesCarousel";
 import EventsDisplay from "./components/EventsDisplay";
 import MovieSuggestionModal from "./components/MovieSuggestionModal";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL =
+  process.env.REACT_APP_BACKEND_URL?.replace(/\/+$/, "") || "";
 const API = `${BACKEND_URL}/api`;
 
-const LOGO_URL = "/logo.png"; // Remplacez par votre logo local dans le dossier public
+const LOGO_URL =
+  "https://customer-assets.emergentagent.com/job_1be2c036-daad-49d1-9eb2-9bdc5e45809e/artifacts/uflyhq5k_90727A68-3F12-4040-8A8D-A2166EC1096A.png"; // Remplacez par votre logo local dans le dossier public
 
 const HERO_IMAGES = [
   "https://images.unsplash.com/photo-1664273240076-f33f88b893a1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDF8MHwxfHNlYXJjaHwxfHxkcml2ZS1pbiUyMGNpbmVtYXxlbnwwfHx8fDE3NTYzNjA3OTJ8MA&ixlib=rb-4.1.0&q=85",
