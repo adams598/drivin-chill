@@ -1553,7 +1553,7 @@ function App() {
                   <p className="text-blue-100 text-base font-semibold">
                     🔒 Les réservations ferment automatiquement{" "}
                     <span className="text-yellow-300">
-                      8h avant chaque séance
+                      2h avant chaque séance
                     </span>
                   </p>
                   <p className="text-blue-200 text-sm">
@@ -1561,8 +1561,8 @@ function App() {
                     d'assurer la meilleure expérience possible.
                   </p>
                   <p className="text-blue-300 text-xs">
-                    Pensez à réserver à l'avance ! Les places étant limitées (21
-                    voitures), nous recommandons de réserver dès que possible.
+                    💡 Tarif : 17€ par voiture • La capacité varie selon la
+                    séance. Pensez à réserver à l'avance !
                   </p>
                 </div>
               </div>
@@ -1577,7 +1577,7 @@ function App() {
                 Notre adresse
               </h3>
               <p className="text-gray-300 text-lg">
-                <strong>10 rue de dion bouton, 87280 Limoges</strong>
+                <strong>Le petit juillac 87100 Limoges</strong>
               </p>
             </div>
           </div>
@@ -1903,7 +1903,15 @@ function App() {
                                 <div className="font-medium">
                                   {schedule.schedule.entry_time &&
                                   schedule.schedule.start_time
-                                    ? `Entrée: ${schedule.schedule.entry_time} • Début: ${schedule.schedule.start_time}`
+                                    ? `Entrée: ${
+                                        schedule.schedule.entry_time
+                                      } • Début: ${
+                                        schedule.schedule.start_time
+                                      }${
+                                        schedule.schedule.end_time
+                                          ? ` • Fin: ${schedule.schedule.end_time}`
+                                          : ""
+                                      }`
                                     : getTimeSlotDisplay(
                                         schedule.schedule.time_slot
                                       )}
@@ -1911,7 +1919,11 @@ function App() {
                                 <div className="text-sm text-gray-300">
                                   {schedule.schedule.entry_time &&
                                   schedule.schedule.start_time
-                                    ? `Film à ${schedule.schedule.start_time}`
+                                    ? `Film à ${schedule.schedule.start_time}${
+                                        schedule.schedule.end_time
+                                          ? ` (fin: ${schedule.schedule.end_time})`
+                                          : ""
+                                      }`
                                     : isHalloween
                                     ? mapTimeSlotToHalloween(
                                         schedule.schedule.time_slot
@@ -1923,7 +1935,11 @@ function App() {
                                   schedule.schedule.start_time
                                     ? `Capacité: ${
                                         schedule.schedule.capacity || 21
-                                      } places`
+                                      } places${
+                                        schedule.movie?.duration_minutes
+                                          ? ` • Durée: ${schedule.movie.duration_minutes} min`
+                                          : ""
+                                      }`
                                     : getTimeSlots().find(
                                         (slot) =>
                                           slot.value ===

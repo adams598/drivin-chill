@@ -43,6 +43,7 @@ const SimpleMovieScheduler = () => {
     time_slot: "21h15",
     entry_time: "20h45",
     start_time: "21h00",
+    end_time: "",
     capacity: 21,
   });
 
@@ -79,6 +80,35 @@ const SimpleMovieScheduler = () => {
 
   const [timeSlotSettings, setTimeSlotSettings] = useState(null);
 
+  // Fonction pour calculer l'heure de fin à partir de l'heure de début et de la durée
+  const calculateEndTime = (startTime, durationMinutes) => {
+    if (!startTime || !durationMinutes) return "";
+
+    // Valider le format de l'heure
+    const timePattern = /^([0-1]?[0-9]|2[0-3])[h:]([0-5][0-9])$/;
+    if (!timePattern.test(startTime)) return "";
+
+    // Extraire les heures et minutes
+    const separator = startTime.includes("h") ? "h" : ":";
+    const [hoursStr, minutesStr] = startTime.split(separator);
+    const hours = parseInt(hoursStr, 10);
+    const minutes = parseInt(minutesStr, 10);
+
+    // Calculer l'heure de fin
+    const startTotalMinutes = hours * 60 + minutes;
+    const endTotalMinutes = startTotalMinutes + parseInt(durationMinutes, 10);
+
+    // Gérer le passage à minuit (24h00)
+    const endHours = Math.floor(endTotalMinutes / 60) % 24;
+    const endMinutes = endTotalMinutes % 60;
+
+    // Formater avec le même séparateur que l'heure de début
+    const formattedHours = endHours.toString().padStart(2, "0");
+    const formattedMinutes = endMinutes.toString().padStart(2, "0");
+
+    return `${formattedHours}${separator}${formattedMinutes}`;
+  };
+
   // Charger les paramètres de créneaux
   useEffect(() => {
     fetchTimeSlotSettings();
@@ -87,6 +117,44 @@ const SimpleMovieScheduler = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Calculer automatiquement l'heure de fin quand l'heure de début ou le film change
+  useEffect(() => {
+    if (scheduleFormData.start_time && scheduleFormData.movie_id) {
+      const selectedMovie = movies.find(
+        (m) => m.id === scheduleFormData.movie_id
+      );
+      if (selectedMovie) {
+        const calculatedEndTime = calculateEndTime(
+          scheduleFormData.start_time,
+          selectedMovie.duration_minutes
+        );
+        if (calculatedEndTime) {
+          setScheduleFormData((prev) => {
+            // Ne mettre à jour que si l'heure de fin calculée est différente
+            if (prev.end_time !== calculatedEndTime) {
+              return {
+                ...prev,
+                end_time: calculatedEndTime,
+              };
+            }
+            return prev;
+          });
+        }
+      }
+    } else {
+      // Réinitialiser end_time si start_time ou movie_id est vide
+      setScheduleFormData((prev) => {
+        if (prev.end_time) {
+          return {
+            ...prev,
+            end_time: "",
+          };
+        }
+        return prev;
+      });
+    }
+  }, [scheduleFormData.start_time, scheduleFormData.movie_id, movies]);
 
   const fetchTimeSlotSettings = async () => {
     try {
@@ -328,6 +396,15 @@ const SimpleMovieScheduler = () => {
         ) {
           updateData.start_time = scheduleFormData.start_time || null;
         }
+        // Toujours mettre à jour end_time si start_time est modifié ou si end_time a changé
+        if (
+          scheduleFormData.start_time !==
+            (editingSchedule.schedule.start_time || "") ||
+          scheduleFormData.end_time !==
+            (editingSchedule.schedule.end_time || "")
+        ) {
+          updateData.end_time = scheduleFormData.end_time || null;
+        }
         if (
           parseInt(scheduleFormData.capacity) !==
           (editingSchedule.schedule.capacity || 21)
@@ -352,13 +429,29 @@ const SimpleMovieScheduler = () => {
         console.log("✅ Programmation modifiée");
         toast.success("✅ Programmation modifiée avec succès !");
       } else {
-        // Création
+        // Création - calculer end_time si nécessaire
+        const selectedMovie = movies.find(
+          (m) => m.id === scheduleFormData.movie_id
+        );
+        let calculatedEndTime = scheduleFormData.end_time;
+        if (
+          !calculatedEndTime &&
+          scheduleFormData.start_time &&
+          selectedMovie
+        ) {
+          calculatedEndTime = calculateEndTime(
+            scheduleFormData.start_time,
+            selectedMovie.duration_minutes
+          );
+        }
+
         const data = {
           movie_id: scheduleFormData.movie_id,
           date: scheduleFormData.date,
           time_slot: scheduleFormData.time_slot,
           entry_time: scheduleFormData.entry_time || null,
           start_time: scheduleFormData.start_time || null,
+          end_time: calculatedEndTime || null,
           capacity: parseInt(scheduleFormData.capacity),
         };
 
@@ -381,6 +474,7 @@ const SimpleMovieScheduler = () => {
         time_slot: "21h15",
         entry_time: "20h45",
         start_time: "21h00",
+        end_time: "",
         capacity: 21,
       });
       setEditingSchedule(null);
@@ -412,6 +506,7 @@ const SimpleMovieScheduler = () => {
       time_slot: schedule.schedule.time_slot,
       entry_time: schedule.schedule.entry_time || "20h45",
       start_time: schedule.schedule.start_time || "21h00",
+      end_time: schedule.schedule.end_time || "",
       capacity: schedule.schedule.capacity || 21,
     });
 
@@ -1009,6 +1104,41 @@ const SimpleMovieScheduler = () => {
               </div>
             </div>
 
+            {/* Heure de fin (calculée automatiquement) */}
+            {scheduleFormData.start_time &&
+              scheduleFormData.movie_id &&
+              (() => {
+                const selectedMovie = movies.find(
+                  (m) => m.id === scheduleFormData.movie_id
+                );
+                const calculatedEndTime = selectedMovie
+                  ? calculateEndTime(
+                      scheduleFormData.start_time,
+                      selectedMovie.duration_minutes
+                    )
+                  : "";
+
+                return calculatedEndTime ? (
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700 flex items-center gap-2">
+                      <Film className="h-4 w-4" />
+                      Heure de fin (calculée automatiquement)
+                    </label>
+                    <input
+                      type="text"
+                      value={calculatedEndTime}
+                      readOnly
+                      className="w-full p-2 border rounded text-gray-800 bg-gray-100 cursor-not-allowed"
+                      placeholder="Sera calculée automatiquement"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Calculée à partir de l'heure de début et de la durée du
+                      film
+                    </p>
+                  </div>
+                ) : null;
+              })()}
+
             {/* Message d'alerte */}
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-start gap-2">
               <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
@@ -1149,6 +1279,7 @@ const SimpleMovieScheduler = () => {
                       time_slot: "21h15",
                       entry_time: "20h45",
                       start_time: "21h00",
+                      end_time: "",
                       capacity: 21,
                     });
                   }}
@@ -1204,6 +1335,9 @@ const SimpleMovieScheduler = () => {
                             {" "}
                             · Entrée: {schedule.schedule.entry_time} · Début:{" "}
                             {schedule.schedule.start_time}
+                            {schedule.schedule.end_time && (
+                              <> · Fin: {schedule.schedule.end_time}</>
+                            )}
                           </>
                         )}
                     </small>

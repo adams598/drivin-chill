@@ -92,7 +92,9 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
   const getDisplayTime = (schedule) => {
     // Priorité aux horaires réels si disponibles
     if (schedule.entry_time && schedule.start_time) {
-      return `Entrée: ${schedule.entry_time} • Film: ${schedule.start_time}`;
+      return `Entrée: ${schedule.entry_time} • Film: ${schedule.start_time}${
+        schedule.end_time ? ` • Fin: ${schedule.end_time}` : ""
+      }`;
     }
 
     // Sinon, utiliser les paramètres de créneaux
@@ -164,82 +166,9 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
 
         <CardContent className="p-6">
           {currentItem && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Movie Poster */}
-              {currentItem.content.poster_url ? (
-                <div className="flex justify-center lg:justify-start">
-                  <img
-                    src={(() => {
-                      const url = currentItem.content.poster_url;
-                      if (url && url.includes("canva.com/design/")) {
-                        const proxyUrl = process.env.REACT_APP_CANVA_PROXY_URL;
-                        if (proxyUrl) {
-                          // Nettoyer l'URL du proxy (enlever les paramètres existants)
-                          let cleanProxyUrl = proxyUrl.split("?")[0]; // Enlever tout ce qui suit le ?
-                          cleanProxyUrl = cleanProxyUrl.endsWith("/")
-                            ? cleanProxyUrl.slice(0, -1)
-                            : cleanProxyUrl;
-                          return `${cleanProxyUrl}/?url=${encodeURIComponent(
-                            url
-                          )}`;
-                        }
-                      }
-                      return url;
-                    })()}
-                    alt={currentItem.content.title}
-                    className="w-48 h-72 object-cover rounded-lg border-4 border-blue-400 shadow-xl transition-transform hover:scale-105"
-                    onError={(e) => {
-                      const originalUrl = currentItem.content.poster_url;
-                      const currentSrc = e.target.src;
-                      console.error("Erreur de chargement de l'image:", {
-                        original: originalUrl,
-                        current: currentSrc,
-                        isCanva:
-                          originalUrl && originalUrl.includes("canva.com"),
-                        hasProxy: !!process.env.REACT_APP_CANVA_PROXY_URL,
-                      });
-
-                      // Si c'est une URL Canva et que le proxy n'est pas configuré
-                      if (
-                        originalUrl &&
-                        originalUrl.includes("canva.com") &&
-                        !process.env.REACT_APP_CANVA_PROXY_URL
-                      ) {
-                        console.warn(
-                          "⚠️ URL Canva détectée mais REACT_APP_CANVA_PROXY_URL n'est pas configuré dans .env"
-                        );
-                      }
-
-                      // Remplacer par un placeholder SVG inline
-                      e.target.src =
-                        "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQ1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQ1MCIgZmlsbD0iIzFlM2E4YSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5BZmZpY2hlIG5vbiBkaXNwb25pYmxlPC90ZXh0Pjwvc3ZnPg==";
-                      e.target.onerror = null; // Éviter la boucle infinie
-                    }}
-                    onLoad={() => {
-                      console.log(
-                        "Image chargée avec succès:",
-                        currentItem.content.poster_url
-                      );
-                    }}
-                    loading="lazy"
-                  />
-                </div>
-              ) : (
-                <div className="flex justify-center lg:justify-start items-center w-48 h-72 bg-gray-700 rounded-lg border-4 border-blue-400">
-                  <span className="text-gray-400 text-xs text-center px-2">
-                    Aucune affiche
-                  </span>
-                </div>
-              )}
-
+            <div className="space-y-6">
               {/* Movie Details */}
-              <div
-                className={`${
-                  currentItem.content.poster_url
-                    ? "lg:col-span-2"
-                    : "lg:col-span-3"
-                } space-y-4`}
-              >
+              <div className="space-y-4">
                 <div>
                   <h3 className="text-white text-3xl font-bold mb-2">
                     {currentItem.content.title}
@@ -274,6 +203,74 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
                   </div>
                 </div>
 
+                {/* Movie Poster */}
+                {currentItem.content.poster_url ? (
+                  <div className="flex justify-center">
+                    <img
+                      src={(() => {
+                        const url = currentItem.content.poster_url;
+                        if (url && url.includes("canva.com/design/")) {
+                          const proxyUrl =
+                            process.env.REACT_APP_CANVA_PROXY_URL;
+                          if (proxyUrl) {
+                            // Nettoyer l'URL du proxy (enlever les paramètres existants)
+                            let cleanProxyUrl = proxyUrl.split("?")[0]; // Enlever tout ce qui suit le ?
+                            cleanProxyUrl = cleanProxyUrl.endsWith("/")
+                              ? cleanProxyUrl.slice(0, -1)
+                              : cleanProxyUrl;
+                            return `${cleanProxyUrl}/?url=${encodeURIComponent(
+                              url
+                            )}`;
+                          }
+                        }
+                        return url;
+                      })()}
+                      alt={currentItem.content.title}
+                      className="w-48 h-72 object-cover rounded-lg border-4 border-blue-400 shadow-xl transition-transform hover:scale-105"
+                      onError={(e) => {
+                        const originalUrl = currentItem.content.poster_url;
+                        const currentSrc = e.target.src;
+                        console.error("Erreur de chargement de l'image:", {
+                          original: originalUrl,
+                          current: currentSrc,
+                          isCanva:
+                            originalUrl && originalUrl.includes("canva.com"),
+                          hasProxy: !!process.env.REACT_APP_CANVA_PROXY_URL,
+                        });
+
+                        // Si c'est une URL Canva et que le proxy n'est pas configuré
+                        if (
+                          originalUrl &&
+                          originalUrl.includes("canva.com") &&
+                          !process.env.REACT_APP_CANVA_PROXY_URL
+                        ) {
+                          console.warn(
+                            "⚠️ URL Canva détectée mais REACT_APP_CANVA_PROXY_URL n'est pas configuré dans .env"
+                          );
+                        }
+
+                        // Remplacer par un placeholder SVG inline
+                        e.target.src =
+                          "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQ1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQ1MCIgZmlsbD0iIzFlM2E4YSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5BZmZpY2hlIG5vbiBkaXNwb25pYmxlPC90ZXh0Pjwvc3ZnPg==";
+                        e.target.onerror = null; // Éviter la boucle infinie
+                      }}
+                      onLoad={() => {
+                        console.log(
+                          "Image chargée avec succès:",
+                          currentItem.content.poster_url
+                        );
+                      }}
+                      loading="lazy"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex justify-center items-center w-48 h-72 bg-gray-700 rounded-lg border-4 border-blue-400 mx-auto">
+                    <span className="text-gray-400 text-xs text-center px-2">
+                      Aucune affiche
+                    </span>
+                  </div>
+                )}
+
                 {/* Synopsis */}
                 <div>
                   <h4 className="text-blue-100 font-semibold mb-2 text-lg">
@@ -303,7 +300,11 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
                     <div className="text-right">
                       <div className="text-green-100 font-semibold text-lg">
                         {currentItem.schedule.start_time
-                          ? `Film à ${currentItem.schedule.start_time}`
+                          ? `Film à ${currentItem.schedule.start_time}${
+                              currentItem.schedule.end_time
+                                ? ` (fin: ${currentItem.schedule.end_time})`
+                                : ""
+                            }`
                           : currentItem.schedule.time_slot === "21h15" ||
                             currentItem.schedule.time_slot ===
                               (timeSlotSettings?.first_slot_value || "21h15")
@@ -317,6 +318,9 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
                       <div className="text-green-200 text-sm">
                         Capacité : {currentItem.schedule.capacity || 21}{" "}
                         voitures
+                        {currentItem.content?.duration_minutes
+                          ? ` • Durée: ${currentItem.content.duration_minutes} min`
+                          : ""}
                       </div>
                     </div>
                   </div>
