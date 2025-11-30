@@ -29,6 +29,8 @@ const SimpleMovieScheduler = () => {
     movie_id: '',
     date: '',
     time_slot: '21h15',
+    entry_time: '20h45',
+    start_time: '21h00',
     capacity: 21
   });
 
@@ -240,8 +242,19 @@ const SimpleMovieScheduler = () => {
   const handleScheduleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!scheduleFormData.movie_id || !scheduleFormData.date || !scheduleFormData.time_slot) {
-      toast.error('Veuillez remplir tous les champs');
+    if (!scheduleFormData.movie_id || !scheduleFormData.date || !scheduleFormData.time_slot || !scheduleFormData.entry_time || !scheduleFormData.start_time) {
+      toast.error('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
+    // Valider le format des horaires
+    const timePattern = /^([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]$/;
+    if (!timePattern.test(scheduleFormData.entry_time)) {
+      toast.error('Format d\'heure d\'entrée invalide. Utilisez le format 20h45 ou 20:45');
+      return;
+    }
+    if (!timePattern.test(scheduleFormData.start_time)) {
+      toast.error('Format d\'heure de début invalide. Utilisez le format 21h00 ou 21:00');
       return;
     }
 
@@ -252,6 +265,8 @@ const SimpleMovieScheduler = () => {
         movie_id: scheduleFormData.movie_id,
         date: scheduleFormData.date,
         time_slot: scheduleFormData.time_slot,
+        entry_time: scheduleFormData.entry_time || null,
+        start_time: scheduleFormData.start_time || null,
         capacity: parseInt(scheduleFormData.capacity)
       };
 
@@ -271,6 +286,8 @@ const SimpleMovieScheduler = () => {
         movie_id: '',
         date: '',
         time_slot: '21h15',
+        entry_time: '20h45',
+        start_time: '21h00',
         capacity: 21
       });
       
@@ -624,7 +641,10 @@ const SimpleMovieScheduler = () => {
       {/* === SECTION 2: PROGRAMMER UN FILM === */}
       <Card>
         <CardHeader>
-          <CardTitle>🎬 Programmer un Film</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Film className="h-5 w-5" />
+            Programmer un Film
+          </CardTitle>
           <CardDescription>
             Sélectionnez un film de votre liste et choisissez une date/créneau
           </CardDescription>
@@ -650,50 +670,193 @@ const SimpleMovieScheduler = () => {
             {/* Date */}
             <div>
               <label className="block text-sm font-medium mb-2 text-gray-700">Date *</label>
+              <div className="relative">
+                <input 
+                  type="date"
+                  value={scheduleFormData.date}
+                  onChange={(e) => setScheduleFormData({...scheduleFormData, date: e.target.value})}
+                  className="w-full p-2 border rounded text-gray-800 pr-10"
+                  required
+                />
+                <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 pointer-events-none">
+                  📅
+                </span>
+              </div>
+            </div>
+
+            {/* Heure d'entrée */}
+            <div>
+              <label className="block text-sm font-medium mb-2 text-gray-700 flex items-center gap-2">
+                <span className="inline-block w-3 h-3 bg-amber-600 rounded"></span>
+                Heure d'entrée *
+              </label>
+              <p className="text-xs text-gray-500 mb-1">Format: 20h45 ou 20:45</p>
               <input 
-                type="date"
-                value={scheduleFormData.date}
-                onChange={(e) => setScheduleFormData({...scheduleFormData, date: e.target.value})}
+                type="text"
+                value={scheduleFormData.entry_time}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Permettre les formats 20h45 ou 20:45
+                  if (/^([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]$/.test(value) || value === '') {
+                    setScheduleFormData({...scheduleFormData, entry_time: value});
+                  }
+                }}
                 className="w-full p-2 border rounded text-gray-800"
+                placeholder="20h45"
                 required
+                pattern="([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]"
               />
             </div>
 
-            {/* Créneau */}
+            {/* Heure début film */}
             <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700">Créneau *</label>
-              <select 
-                value={scheduleFormData.time_slot}
-                onChange={(e) => setScheduleFormData({...scheduleFormData, time_slot: e.target.value})}
+              <label className="block text-sm font-medium mb-2 text-gray-700 flex items-center gap-2">
+                <Film className="h-4 w-4" />
+                Heure début film *
+              </label>
+              <p className="text-xs text-gray-500 mb-1">Format: 21h00 ou 21:00</p>
+              <input 
+                type="text"
+                value={scheduleFormData.start_time}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Permettre les formats 21h00 ou 21:00
+                  if (/^([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]$/.test(value) || value === '') {
+                    setScheduleFormData({...scheduleFormData, start_time: value});
+                  }
+                }}
                 className="w-full p-2 border rounded text-gray-800"
+                placeholder="21h00"
                 required
-              >
-                {timeSlots.map(slot => (
-                  <option key={slot.value} value={slot.value}>{slot.label}</option>
-                ))}
-              </select>
+                pattern="([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]"
+              />
+            </div>
+
+            {/* Message d'alerte */}
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-start gap-2">
+              <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-yellow-800">
+                <strong>Important :</strong> Les horaires doivent être au format 20h45 ou 20:45
+              </p>
+            </div>
+
+            {/* Créneaux suggérés */}
+            <div>
+              <label className="block text-sm font-medium mb-2 text-gray-700 flex items-center gap-2">
+                💡 Créneaux suggérés :
+              </label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="bg-blue-50 hover:bg-blue-100 border-blue-300 text-blue-800"
+                  onClick={() => {
+                    setScheduleFormData({
+                      ...scheduleFormData,
+                      entry_time: '18h30',
+                      start_time: '19h00',
+                      time_slot: timeSlotSettings?.first_slot_value || '21h15'
+                    });
+                  }}
+                >
+                  1ère séance (entrée tôt): 18h30 → 19h00
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="bg-blue-50 hover:bg-blue-100 border-blue-300 text-blue-800"
+                  onClick={() => {
+                    setScheduleFormData({
+                      ...scheduleFormData,
+                      entry_time: timeSlotSettings?.first_slot_entry_time || '20h45',
+                      start_time: timeSlotSettings?.first_slot_start_time || '21h00',
+                      time_slot: timeSlotSettings?.first_slot_value || '21h15'
+                    });
+                  }}
+                >
+                  1ère séance (standard): {timeSlotSettings?.first_slot_entry_time || '20h45'} → {timeSlotSettings?.first_slot_start_time || '21h00'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="bg-blue-50 hover:bg-blue-100 border-blue-300 text-blue-800"
+                  onClick={() => {
+                    setScheduleFormData({
+                      ...scheduleFormData,
+                      entry_time: timeSlotSettings?.second_slot_entry_time || '21h00',
+                      start_time: timeSlotSettings?.second_slot_start_time || '21h15',
+                      time_slot: timeSlotSettings?.second_slot_value || '23h45'
+                    });
+                  }}
+                >
+                  2ème séance: {timeSlotSettings?.second_slot_entry_time || '21h00'} → {timeSlotSettings?.second_slot_start_time || '21h15'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="bg-blue-50 hover:bg-blue-100 border-blue-300 text-blue-800"
+                  onClick={() => {
+                    setScheduleFormData({
+                      ...scheduleFormData,
+                      entry_time: timeSlotSettings?.third_slot_entry_time || '23h15',
+                      start_time: timeSlotSettings?.third_slot_start_time || '23h30',
+                      time_slot: timeSlotSettings?.third_slot_value || '01h30'
+                    });
+                  }}
+                >
+                  3ème séance: {timeSlotSettings?.third_slot_entry_time || '23h15'} → {timeSlotSettings?.third_slot_start_time || '23h30'}
+                </Button>
+              </div>
             </div>
 
             {/* Capacité */}
             <div>
               <label className="block text-sm font-medium mb-2 text-gray-700">Capacité *</label>
-              <input 
-                type="number"
-                value={scheduleFormData.capacity}
-                onChange={(e) => setScheduleFormData({...scheduleFormData, capacity: e.target.value})}
-                className="w-full p-2 border rounded text-gray-800"
-                min="1"
-                max="50"
-                required
-              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newCapacity = Math.max(1, parseInt(scheduleFormData.capacity) - 1);
+                    setScheduleFormData({...scheduleFormData, capacity: newCapacity});
+                  }}
+                  className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 text-gray-700 font-bold"
+                >
+                  −
+                </button>
+                <input 
+                  type="number"
+                  value={scheduleFormData.capacity}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 1;
+                    if (value >= 1 && value <= 50) {
+                      setScheduleFormData({...scheduleFormData, capacity: value});
+                    }
+                  }}
+                  className="flex-1 p-2 border rounded text-gray-800 text-center"
+                  min="1"
+                  max="50"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newCapacity = Math.min(50, parseInt(scheduleFormData.capacity) + 1);
+                    setScheduleFormData({...scheduleFormData, capacity: newCapacity});
+                  }}
+                  className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 text-gray-700 font-bold"
+                >
+                  +
+                </button>
+              </div>
             </div>
 
             <Button 
               type="submit" 
               disabled={loading || movies.length === 0}
-              className="w-full bg-orange-600 hover:bg-orange-700"
+              className="w-full bg-orange-600 hover:bg-orange-700 flex items-center justify-center gap-2"
             >
-              {loading ? '⏳ Programmation...' : '🎃 Programmer'}
+              <Film className="h-4 w-4" />
+              {loading ? '⏳ Programmation...' : 'Programmer'}
             </Button>
             
             {movies.length === 0 && (

@@ -437,6 +437,8 @@ class MovieSchedule(BaseModel):
     movie_id: str
     date: date
     time_slot: TimeSlot
+    entry_time: Optional[str] = None  # Heure d'entrée (ex: "20h45" ou "20:45")
+    start_time: Optional[str] = None  # Heure de début du film (ex: "21h00" ou "21:00")
     capacity: int = 21  # Customizable capacity per schedule (default 21)
     is_active: bool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -445,6 +447,8 @@ class MovieScheduleCreate(BaseModel):
     movie_id: str
     date: date
     time_slot: TimeSlot
+    entry_time: Optional[str] = None  # Heure d'entrée (ex: "20h45" ou "20:45")
+    start_time: Optional[str] = None  # Heure de début du film (ex: "21h00" ou "21:00")
     capacity: int = 21  # Default capacity, can be customized
 
 class MovieScheduleWithMovie(BaseModel):
