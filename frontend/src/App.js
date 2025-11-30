@@ -421,30 +421,38 @@ function App() {
     const slots = [
       {
         value: timeSlotSettings.first_slot_value || "21h15", // Configurable value - First show
-        label: `Entrée : ${timeSlotSettings.first_slot_entry_time} • Film : ${timeSlotSettings.first_slot_start_time}-${timeSlotSettings.first_slot_end_time || '21h00'}`,
+        label: `Entrée : ${timeSlotSettings.first_slot_entry_time} • Film : ${
+          timeSlotSettings.first_slot_start_time
+        }-${timeSlotSettings.first_slot_end_time || "21h00"}`,
         display: "1er Film",
         entry: timeSlotSettings.first_slot_entry_time,
         start: timeSlotSettings.first_slot_start_time,
-        end: timeSlotSettings.first_slot_end_time || '21h00',
+        end: timeSlotSettings.first_slot_end_time || "21h00",
       },
       {
         value: timeSlotSettings.second_slot_value || "23h45", // Configurable value - Second show
-        label: `Entrée : ${timeSlotSettings.second_slot_entry_time} • Film : ${timeSlotSettings.second_slot_start_time}-${timeSlotSettings.second_slot_end_time || '23h15'}`,
+        label: `Entrée : ${timeSlotSettings.second_slot_entry_time} • Film : ${
+          timeSlotSettings.second_slot_start_time
+        }-${timeSlotSettings.second_slot_end_time || "23h15"}`,
         display: "2ème Film",
         entry: timeSlotSettings.second_slot_entry_time,
         start: timeSlotSettings.second_slot_start_time,
-        end: timeSlotSettings.second_slot_end_time || '23h15',
+        end: timeSlotSettings.second_slot_end_time || "23h15",
       },
     ];
 
     // Toujours ajouter le 3ème créneau (avec valeurs par défaut si non définies)
     slots.push({
       value: timeSlotSettings.third_slot_value || "01h30", // Configurable value - Third show
-      label: `Entrée : ${timeSlotSettings.third_slot_entry_time || '23h15'} • Film : ${timeSlotSettings.third_slot_start_time || '23h30'}-${timeSlotSettings.third_slot_end_time || '01h30'}`,
+      label: `Entrée : ${
+        timeSlotSettings.third_slot_entry_time || "23h15"
+      } • Film : ${timeSlotSettings.third_slot_start_time || "23h30"}-${
+        timeSlotSettings.third_slot_end_time || "01h30"
+      }`,
       display: "3ème Film",
-      entry: timeSlotSettings.third_slot_entry_time || '23h15',
-      start: timeSlotSettings.third_slot_start_time || '23h30',
-      end: timeSlotSettings.third_slot_end_time || '01h30',
+      entry: timeSlotSettings.third_slot_entry_time || "23h15",
+      start: timeSlotSettings.third_slot_start_time || "23h30",
+      end: timeSlotSettings.third_slot_end_time || "01h30",
     });
 
     return slots;
@@ -625,10 +633,12 @@ function App() {
       setMovieSchedules(schedulesForDate); // Reuse the same state but with event data
 
       // Also fetch availability info for each time slot (using configurable values)
-      const timeSlotValues = timeSlotSettings ? [
-        timeSlotSettings.first_slot_value || "21h15",
-        timeSlotSettings.second_slot_value || "23h45"
-      ] : ["21h15", "23h45"];
+      const timeSlotValues = timeSlotSettings
+        ? [
+            timeSlotSettings.first_slot_value || "21h15",
+            timeSlotSettings.second_slot_value || "23h45",
+          ]
+        : ["21h15", "23h45"];
       const availabilityPromises = timeSlotValues.map(async (timeSlot) => {
         try {
           const availResponse = await axios.get(
@@ -662,10 +672,12 @@ function App() {
       setMovieSchedules(response.data);
 
       // Also fetch availability info for each time slot (using configurable values)
-      const timeSlotValues = timeSlotSettings ? [
-        timeSlotSettings.first_slot_value || "21h15",
-        timeSlotSettings.second_slot_value || "23h45"
-      ] : ["21h15", "23h45"];
+      const timeSlotValues = timeSlotSettings
+        ? [
+            timeSlotSettings.first_slot_value || "21h15",
+            timeSlotSettings.second_slot_value || "23h45",
+          ]
+        : ["21h15", "23h45"];
       const availabilityPromises = timeSlotValues.map(async (timeSlot) => {
         try {
           const availResponse = await axios.get(
@@ -2078,13 +2090,18 @@ function App() {
                               // Convertir automatiquement les URLs Canva via le proxy
                               // Utiliser une fonction inline pour éviter les imports dynamiques
                               const url = selectedMovie.poster_url;
-                              if (url && url.includes('canva.com/design/')) {
-                                const proxyUrl = process.env.REACT_APP_CANVA_PROXY_URL;
+                              if (url && url.includes("canva.com/design/")) {
+                                const proxyUrl =
+                                  process.env.REACT_APP_CANVA_PROXY_URL;
                                 if (proxyUrl) {
                                   // Nettoyer l'URL du proxy (enlever les paramètres existants)
-                                  let cleanProxyUrl = proxyUrl.split('?')[0]; // Enlever tout ce qui suit le ?
-                                  cleanProxyUrl = cleanProxyUrl.endsWith('/') ? cleanProxyUrl.slice(0, -1) : cleanProxyUrl;
-                                  return `${cleanProxyUrl}/?url=${encodeURIComponent(url)}`;
+                                  let cleanProxyUrl = proxyUrl.split("?")[0]; // Enlever tout ce qui suit le ?
+                                  cleanProxyUrl = cleanProxyUrl.endsWith("/")
+                                    ? cleanProxyUrl.slice(0, -1)
+                                    : cleanProxyUrl;
+                                  return `${cleanProxyUrl}/?url=${encodeURIComponent(
+                                    url
+                                  )}`;
                                 }
                               }
                               return url;
@@ -2094,36 +2111,55 @@ function App() {
                             onError={(e) => {
                               const originalUrl = selectedMovie.poster_url;
                               const currentSrc = e.target.src;
-                              console.error('Erreur de chargement de l\'image:', {
-                                original: originalUrl,
-                                current: currentSrc,
-                                isCanva: originalUrl && originalUrl.includes('canva.com'),
-                                hasProxy: !!process.env.REACT_APP_CANVA_PROXY_URL
-                              });
-                              
+                              console.error(
+                                "Erreur de chargement de l'image:",
+                                {
+                                  original: originalUrl,
+                                  current: currentSrc,
+                                  isCanva:
+                                    originalUrl &&
+                                    originalUrl.includes("canva.com"),
+                                  hasProxy:
+                                    !!process.env.REACT_APP_CANVA_PROXY_URL,
+                                }
+                              );
+
                               // Si c'est une URL Canva et que le proxy n'est pas configuré, afficher un message
-                              if (originalUrl && originalUrl.includes('canva.com') && !process.env.REACT_APP_CANVA_PROXY_URL) {
-                                console.warn('⚠️ URL Canva détectée mais REACT_APP_CANVA_PROXY_URL n\'est pas configuré dans .env');
+                              if (
+                                originalUrl &&
+                                originalUrl.includes("canva.com") &&
+                                !process.env.REACT_APP_CANVA_PROXY_URL
+                              ) {
+                                console.warn(
+                                  "⚠️ URL Canva détectée mais REACT_APP_CANVA_PROXY_URL n'est pas configuré dans .env"
+                                );
                               }
-                              
+
                               // Remplacer par un placeholder SVG inline
-                              e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzFlM2E4YSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5BZmZpY2hlIG5vbiBkaXNwb25pYmxlPC90ZXh0Pjwvc3ZnPg==';
+                              e.target.src =
+                                "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzFlM2E4YSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5BZmZpY2hlIG5vbiBkaXNwb25pYmxlPC90ZXh0Pjwvc3ZnPg==";
                               e.target.onerror = null; // Éviter la boucle infinie
                             }}
                             onLoad={() => {
-                              console.log('Image chargée avec succès:', selectedMovie.poster_url);
+                              console.log(
+                                "Image chargée avec succès:",
+                                selectedMovie.poster_url
+                              );
                             }}
                             loading="lazy"
                           />
                         </div>
                       ) : (
                         <div className="flex justify-center items-center w-32 h-48 bg-gray-700 rounded-lg border-2 border-blue-500">
-                          <span className="text-gray-400 text-xs text-center px-2">Aucune affiche</span>
+                          <span className="text-gray-400 text-xs text-center px-2">
+                            Aucune affiche
+                          </span>
                         </div>
                       )}
                       <div
                         className={`${
-                          selectedMovie.poster_url && selectedMovie.poster_url.trim()
+                          selectedMovie.poster_url &&
+                          selectedMovie.poster_url.trim()
                             ? "lg:col-span-2"
                             : "lg:col-span-3"
                         } space-y-4`}
