@@ -780,64 +780,67 @@ const SimpleMovieScheduler = () => {
               </div>
             </div>
 
-            {/* Heure d'entrée */}
-            <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700 flex items-center gap-2">
-                <span className="inline-block w-3 h-3 bg-amber-600 rounded"></span>
-                Heure d'entrée *
-              </label>
-              <p className="text-xs text-gray-500 mb-1">Format: 20h45 ou 20:45</p>
-              <input 
-                type="text"
-                value={scheduleFormData.entry_time || ''}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  // Permettre la saisie progressive : chiffres, puis h ou :, puis chiffres
-                  // Accepter : vide, chiffres seuls, chiffres+h/chiffres:, chiffres+h/chiffres:chiffres
-                  if (value === '' || 
-                      /^[0-2]?$/.test(value) || 
-                      /^([0-1]?[0-9]|2[0-3])$/.test(value) ||
-                      /^([0-1]?[0-9]|2[0-3])[h:]$/.test(value) ||
-                      /^([0-1]?[0-9]|2[0-3])[h:][0-5]?$/.test(value) ||
-                      /^([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]$/.test(value)) {
-                    setScheduleFormData({...scheduleFormData, entry_time: value});
-                  }
-                }}
-                className="w-full p-2 border rounded text-gray-800"
-                placeholder="20h45"
-                required
-                pattern="([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]"
-              />
-            </div>
+            {/* Heures d'entrée et début film sur la même ligne */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Heure d'entrée */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700 flex items-center gap-2">
+                  <span className="inline-block w-3 h-3 bg-amber-600 rounded"></span>
+                  Heure d'entrée *
+                </label>
+                <p className="text-xs text-gray-500 mb-1">Format: 20h45 ou 20:45</p>
+                <input 
+                  type="text"
+                  value={scheduleFormData.entry_time || ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Permettre la saisie progressive : chiffres, puis h ou :, puis chiffres
+                    // Accepter : vide, chiffres seuls, chiffres+h/chiffres:, chiffres+h/chiffres:chiffres
+                    if (value === '' || 
+                        /^[0-2]?$/.test(value) || 
+                        /^([0-1]?[0-9]|2[0-3])$/.test(value) ||
+                        /^([0-1]?[0-9]|2[0-3])[h:]$/.test(value) ||
+                        /^([0-1]?[0-9]|2[0-3])[h:][0-5]?$/.test(value) ||
+                        /^([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]$/.test(value)) {
+                      setScheduleFormData({...scheduleFormData, entry_time: value});
+                    }
+                  }}
+                  className="w-full p-2 border rounded text-gray-800"
+                  placeholder="20h45"
+                  required
+                  pattern="([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]"
+                />
+              </div>
 
-            {/* Heure début film */}
-            <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700 flex items-center gap-2">
-                <Film className="h-4 w-4" />
-                Heure début film *
-              </label>
-              <p className="text-xs text-gray-500 mb-1">Format: 21h00 ou 21:00</p>
-              <input 
-                type="text"
-                value={scheduleFormData.start_time || ''}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  // Permettre la saisie progressive : chiffres, puis h ou :, puis chiffres
-                  // Accepter : vide, chiffres seuls, chiffres+h/chiffres:, chiffres+h/chiffres:chiffres
-                  if (value === '' || 
-                      /^[0-2]?$/.test(value) || 
-                      /^([0-1]?[0-9]|2[0-3])$/.test(value) ||
-                      /^([0-1]?[0-9]|2[0-3])[h:]$/.test(value) ||
-                      /^([0-1]?[0-9]|2[0-3])[h:][0-5]?$/.test(value) ||
-                      /^([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]$/.test(value)) {
-                    setScheduleFormData({...scheduleFormData, start_time: value});
-                  }
-                }}
-                className="w-full p-2 border rounded text-gray-800"
-                placeholder="21h00"
-                required
-                pattern="([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]"
-              />
+              {/* Heure début film */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700 flex items-center gap-2">
+                  <Film className="h-4 w-4" />
+                  Heure début film *
+                </label>
+                <p className="text-xs text-gray-500 mb-1">Format: 21h00 ou 21:00</p>
+                <input 
+                  type="text"
+                  value={scheduleFormData.start_time || ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Permettre la saisie progressive : chiffres, puis h ou :, puis chiffres
+                    // Accepter : vide, chiffres seuls, chiffres+h/chiffres:, chiffres+h/chiffres:chiffres
+                    if (value === '' || 
+                        /^[0-2]?$/.test(value) || 
+                        /^([0-1]?[0-9]|2[0-3])$/.test(value) ||
+                        /^([0-1]?[0-9]|2[0-3])[h:]$/.test(value) ||
+                        /^([0-1]?[0-9]|2[0-3])[h:][0-5]?$/.test(value) ||
+                        /^([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]$/.test(value)) {
+                      setScheduleFormData({...scheduleFormData, start_time: value});
+                    }
+                  }}
+                  className="w-full p-2 border rounded text-gray-800"
+                  placeholder="21h00"
+                  required
+                  pattern="([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]"
+                />
+              </div>
             </div>
 
             {/* Message d'alerte */}
