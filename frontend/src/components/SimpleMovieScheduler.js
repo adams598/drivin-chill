@@ -729,21 +729,68 @@ const SimpleMovieScheduler = () => {
                 Heure d'entrée *
               </label>
               <p className="text-xs text-gray-500 mb-1">Format: 20h45 ou 20:45</p>
-              <input 
-                type="text"
-                value={scheduleFormData.entry_time}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  // Permettre les formats 20h45 ou 20:45
-                  if (/^([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]$/.test(value) || value === '') {
-                    setScheduleFormData({...scheduleFormData, entry_time: value});
-                  }
-                }}
-                className="w-full p-2 border rounded text-gray-800"
-                placeholder="20h45"
-                required
-                pattern="([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]"
-              />
+              <div className="flex gap-2">
+                <select
+                  value={(() => {
+                    const match = scheduleFormData.entry_time?.match(/^(\d{1,2})[h:]/);
+                    return match ? parseInt(match[1]) : 20;
+                  })()}
+                  onChange={(e) => {
+                    const hours = parseInt(e.target.value);
+                    const minutes = (() => {
+                      const match = scheduleFormData.entry_time?.match(/[h:](\d{2})/);
+                      return match ? parseInt(match[1]) : 0;
+                    })();
+                    setScheduleFormData({
+                      ...scheduleFormData,
+                      entry_time: `${hours.toString().padStart(2, '0')}h${minutes.toString().padStart(2, '0')}`
+                    });
+                  }}
+                  className="flex-1 p-2 border rounded text-gray-800"
+                  required
+                >
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <option key={i} value={i}>{i.toString().padStart(2, '0')}h</option>
+                  ))}
+                </select>
+                <select
+                  value={(() => {
+                    const match = scheduleFormData.entry_time?.match(/[h:](\d{2})/);
+                    return match ? parseInt(match[1]) : 0;
+                  })()}
+                  onChange={(e) => {
+                    const minutes = parseInt(e.target.value);
+                    const hours = (() => {
+                      const match = scheduleFormData.entry_time?.match(/^(\d{1,2})[h:]/);
+                      return match ? parseInt(match[1]) : 20;
+                    })();
+                    setScheduleFormData({
+                      ...scheduleFormData,
+                      entry_time: `${hours.toString().padStart(2, '0')}h${minutes.toString().padStart(2, '0')}`
+                    });
+                  }}
+                  className="flex-1 p-2 border rounded text-gray-800"
+                  required
+                >
+                  {Array.from({ length: 60 }, (_, i) => (
+                    <option key={i} value={i}>{i.toString().padStart(2, '0')}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={scheduleFormData.entry_time || ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Permettre les formats 20h45 ou 20:45
+                    if (/^([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]$/.test(value) || value === '') {
+                      setScheduleFormData({...scheduleFormData, entry_time: value});
+                    }
+                  }}
+                  className="flex-1 p-2 border rounded text-gray-800"
+                  placeholder="20h45"
+                  title="Vous pouvez aussi saisir manuellement"
+                />
+              </div>
             </div>
 
             {/* Heure début film */}
@@ -753,21 +800,68 @@ const SimpleMovieScheduler = () => {
                 Heure début film *
               </label>
               <p className="text-xs text-gray-500 mb-1">Format: 21h00 ou 21:00</p>
-              <input 
-                type="text"
-                value={scheduleFormData.start_time}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  // Permettre les formats 21h00 ou 21:00
-                  if (/^([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]$/.test(value) || value === '') {
-                    setScheduleFormData({...scheduleFormData, start_time: value});
-                  }
-                }}
-                className="w-full p-2 border rounded text-gray-800"
-                placeholder="21h00"
-                required
-                pattern="([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]"
-              />
+              <div className="flex gap-2">
+                <select
+                  value={(() => {
+                    const match = scheduleFormData.start_time?.match(/^(\d{1,2})[h:]/);
+                    return match ? parseInt(match[1]) : 21;
+                  })()}
+                  onChange={(e) => {
+                    const hours = parseInt(e.target.value);
+                    const minutes = (() => {
+                      const match = scheduleFormData.start_time?.match(/[h:](\d{2})/);
+                      return match ? parseInt(match[1]) : 0;
+                    })();
+                    setScheduleFormData({
+                      ...scheduleFormData,
+                      start_time: `${hours.toString().padStart(2, '0')}h${minutes.toString().padStart(2, '0')}`
+                    });
+                  }}
+                  className="flex-1 p-2 border rounded text-gray-800"
+                  required
+                >
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <option key={i} value={i}>{i.toString().padStart(2, '0')}h</option>
+                  ))}
+                </select>
+                <select
+                  value={(() => {
+                    const match = scheduleFormData.start_time?.match(/[h:](\d{2})/);
+                    return match ? parseInt(match[1]) : 0;
+                  })()}
+                  onChange={(e) => {
+                    const minutes = parseInt(e.target.value);
+                    const hours = (() => {
+                      const match = scheduleFormData.start_time?.match(/^(\d{1,2})[h:]/);
+                      return match ? parseInt(match[1]) : 21;
+                    })();
+                    setScheduleFormData({
+                      ...scheduleFormData,
+                      start_time: `${hours.toString().padStart(2, '0')}h${minutes.toString().padStart(2, '0')}`
+                    });
+                  }}
+                  className="flex-1 p-2 border rounded text-gray-800"
+                  required
+                >
+                  {Array.from({ length: 60 }, (_, i) => (
+                    <option key={i} value={i}>{i.toString().padStart(2, '0')}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={scheduleFormData.start_time || ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Permettre les formats 21h00 ou 21:00
+                    if (/^([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]$/.test(value) || value === '') {
+                      setScheduleFormData({...scheduleFormData, start_time: value});
+                    }
+                  }}
+                  className="flex-1 p-2 border rounded text-gray-800"
+                  placeholder="21h00"
+                  title="Vous pouvez aussi saisir manuellement"
+                />
+              </div>
             </div>
 
             {/* Message d'alerte */}
