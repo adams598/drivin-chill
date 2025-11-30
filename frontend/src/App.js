@@ -176,17 +176,19 @@ function App() {
 
   // Check for admin token and payment return
   useEffect(() => {
-    const token = localStorage.getItem("admin_token");
-    if (token === "admin_token_2024") {
-      setIsAdmin(true);
-    }
-
-    // Check if returning from payment
+    // Check if returning from payment first (priority)
     const sessionId = getUrlParameter("session_id");
     if (sessionId) {
       setPaymentSessionId(sessionId);
       setCurrentStep("payment-processing");
       checkPaymentStatus(sessionId);
+    } else {
+      // If not returning from payment, check for admin token
+      const token = localStorage.getItem("admin_token");
+      if (token === "admin_token_2024") {
+        setIsAdmin(true);
+        setCurrentStep("admin");
+      }
     }
 
     // Fetch upcoming movie for homepage
@@ -1791,27 +1793,41 @@ function App() {
           </div>
 
           {/* Indicateur de pré-remplissage */}
-          {selectedDate && selectedTimeSlot && selectedMovie && (
-            <Card className="bg-green-900 border-green-700 mb-4">
-              <CardContent className="p-4">
-                <div className="text-center text-green-100">
-                  <div className="flex items-center justify-center mb-2">
-                    <Film className="mr-2 h-5 w-5" />
-                    <span className="font-semibold">
-                      Sélection automatique depuis l'affiche du jour
-                    </span>
-                  </div>
-                  <p className="text-sm">
-                    📅 {format(selectedDate, "EEEE d MMMM", { locale: fr })} •
-                    🕐 {selectedTimeSlot} • 🎬 {selectedMovie.title}
-                  </p>
-                  <p className="text-xs text-green-200 mt-1">
-                    Vous pouvez modifier ces informations si nécessaire
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {selectedDate &&
+            selectedTimeSlot &&
+            selectedMovie &&
+            (() => {
+              // Trouver le schedule correspondant pour obtenir les horaires réels
+              const scheduleForSlot = movieSchedules.find(
+                (schedule) => schedule.schedule.time_slot === selectedTimeSlot
+              );
+              const actualSchedule =
+                scheduleForSlot?.schedule || preFillData?.schedule;
+
+              // Déterminer l'heure à afficher
+              let displayTime = selectedTimeSlot;
+              if (actualSchedule?.entry_time && actualSchedule?.start_time) {
+                displayTime = `Entrée : ${actualSchedule.entry_time} • Diffusion : ${actualSchedule.start_time}`;
+              } else if (actualSchedule?.start_time) {
+                displayTime = `Diffusion : ${actualSchedule.start_time}`;
+              }
+
+              return (
+                <Card className="bg-green-900 border-green-700 mb-4">
+                  <CardContent className="p-4">
+                    <div className="text-center text-green-100">
+                      <div className="flex items-center justify-center mb-2">
+                        <Film className="mr-2 h-5 w-5" />
+                      </div>
+                      <p className="text-sm">
+                        📅 {format(selectedDate, "EEEE d MMMM", { locale: fr })}{" "}
+                        • 🕐 {displayTime} • 🎬 {selectedMovie.title}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
 
           <Card
             className={`${
@@ -2063,21 +2079,40 @@ function App() {
                   )}
 
                 {/* Pre-filled booking indicator */}
-                {isPreFilled && preFillData && (
-                  <div className="bg-green-900 border border-green-600 rounded-lg p-3">
-                    <p className="text-green-100 text-sm flex items-center">
-                      <Film className="mr-2 h-4 w-4" />✅ Réservation
-                      pré-remplie pour "{preFillData.movieTitle}"
-                    </p>
-                    <p className="text-green-200 text-xs mt-1">
-                      Date:{" "}
-                      {format(new Date(preFillData.date), "EEEE dd MMMM yyyy", {
-                        locale: fr,
-                      })}{" "}
-                      • Créneau: {preFillData.timeSlot}
-                    </p>
-                  </div>
-                )}
+                {isPreFilled &&
+                  preFillData &&
+                  (() => {
+                    // Déterminer l'heure à afficher pour le créneau
+                    let displayTimeSlot = preFillData.timeSlot;
+                    if (
+                      preFillData.schedule?.entry_time &&
+                      preFillData.schedule?.start_time
+                    ) {
+                      displayTimeSlot = `Entrée: ${preFillData.schedule.entry_time} • Début: ${preFillData.schedule.start_time}`;
+                    } else if (preFillData.schedule?.start_time) {
+                      displayTimeSlot = `Début: ${preFillData.schedule.start_time}`;
+                    }
+
+                    return (
+                      <div className="bg-green-900 border border-green-600 rounded-lg p-3">
+                        <p className="text-green-100 text-sm flex items-center">
+                          <Film className="mr-2 h-4 w-4" />✅ Réservation pour{" "}
+                          {preFillData.movieTitle}"
+                        </p>
+                        <p className="text-green-200 text-xs mt-1">
+                          Date:{" "}
+                          {format(
+                            new Date(preFillData.date),
+                            "EEEE dd MMMM yyyy",
+                            {
+                              locale: fr,
+                            }
+                          )}{" "}
+                          • Créneau: {displayTimeSlot}
+                        </p>
+                      </div>
+                    );
+                  })()}
 
                 {/* Booking Rules Information */}
                 <div className="bg-blue-900 border border-blue-600 rounded-lg p-3">
