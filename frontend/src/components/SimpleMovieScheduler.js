@@ -3,7 +3,8 @@ import axios from 'axios';
 import { Button } from './ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from './ui/card';
 import { toast } from 'sonner';
-import { Plus, Edit, Trash2, Film } from 'lucide-react';
+import { Plus, Edit, Trash2, Film, AlertCircle } from 'lucide-react';
+import { isCanvaUrl, isDirectImageUrl, cleanImageUrl, getImageUrlHelpMessage } from '../utils/imageHelpers';
 
 const SimpleMovieScheduler = () => {
   const [movies, setMovies] = useState([]);
@@ -453,10 +454,95 @@ const SimpleMovieScheduler = () => {
                 <input 
                   type="url"
                   value={movieFormData.poster_url}
-                  onChange={(e) => setMovieFormData({...movieFormData, poster_url: e.target.value})}
+                  onChange={(e) => {
+                    const url = e.target.value;
+                    setMovieFormData({...movieFormData, poster_url: url});
+                    
+                    // Afficher un avertissement si c'est une URL Canva
+                    const helpMessage = getImageUrlHelpMessage(url);
+                    if (helpMessage && helpMessage.type === 'error') {
+                      toast.warning('URL Canva détectée ! Consultez les instructions ci-dessous pour obtenir l\'URL directe de l\'image.', {
+                        duration: 5000
+                      });
+                    }
+                  }}
                   className="w-full p-2 border rounded text-gray-800"
-                  placeholder="https://..."
+                  placeholder="https://example.com/image.jpg"
                 />
+                {(() => {
+                  const helpMessage = getImageUrlHelpMessage(movieFormData.poster_url);
+                  if (!helpMessage) return null;
+                  
+                  if (helpMessage.type === 'info') {
+                    return (
+                      <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1">
+                            <p className="text-sm font-semibold text-green-800 mb-1">{helpMessage.message}</p>
+                            {helpMessage.explanation && (
+                              <p className="text-xs text-green-700 mb-1">{helpMessage.explanation}</p>
+                            )}
+                            {helpMessage.note && (
+                              <p className="text-xs text-green-600 font-medium">{helpMessage.note}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  if (helpMessage.type === 'error') {
+                    return (
+                      <div className="mt-2 p-4 bg-red-50 border-2 border-red-300 rounded-lg">
+                        <div className="flex items-start gap-3">
+                          <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1">
+                            <p className="text-sm font-bold text-red-900 mb-1">{helpMessage.message}</p>
+                            {helpMessage.explanation && (
+                              <p className="text-xs text-red-700 mb-3 italic">{helpMessage.explanation}</p>
+                            )}
+                            {helpMessage.quickSolution && (
+                              <div className="bg-white p-3 rounded border border-red-200">
+                                <p className="text-xs font-bold text-red-800 mb-2">{helpMessage.quickSolution.title}</p>
+                                <ol className="text-xs text-red-700 space-y-2">
+                                  {helpMessage.quickSolution.steps.map((item, idx) => (
+                                    <li key={idx} className="flex flex-col">
+                                      <span className="font-semibold">{item.step}</span>
+                                      <span className="text-red-600 ml-4">{item.detail}</span>
+                                    </li>
+                                  ))}
+                                </ol>
+                              </div>
+                            )}
+                            {helpMessage.alternatives && (
+                              <p className="text-xs text-red-600 mt-3 font-medium">
+                                {helpMessage.alternatives[0]}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  if (helpMessage.type === 'warning') {
+                    return (
+                      <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-xs font-semibold text-yellow-800 mb-1">{helpMessage.message}</p>
+                        {helpMessage.explanation && (
+                          <p className="text-xs text-yellow-700">{helpMessage.explanation}</p>
+                        )}
+                      </div>
+                    );
+                  }
+                  
+                  return null;
+                })()}
+                <p className="text-xs text-gray-500 mt-1">
+                  💡 Astuce : Utilisez l'URL directe de l'image (qui se termine par .jpg, .png, etc.). 
+                  Pour Canva, vous devez exporter l'image et l'héberger sur un service comme Imgur.
+                </p>
               </div>
 
               {/* URL Trailer */}

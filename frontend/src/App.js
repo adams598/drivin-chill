@@ -2074,13 +2074,25 @@ function App() {
                       {selectedMovie.poster_url ? (
                         <div className="flex justify-center">
                           <img
-                            src={selectedMovie.poster_url}
+                            src={(() => {
+                              // Convertir automatiquement les URLs Canva via le proxy
+                              // Utiliser une fonction inline pour éviter les imports dynamiques
+                              const url = selectedMovie.poster_url;
+                              if (url && url.includes('canva.com/design/')) {
+                                const proxyUrl = process.env.REACT_APP_CANVA_PROXY_URL;
+                                if (proxyUrl) {
+                                  const proxyEndpoint = proxyUrl.endsWith('/') ? proxyUrl.slice(0, -1) : proxyUrl;
+                                  return `${proxyEndpoint}/?url=${encodeURIComponent(url)}`;
+                                }
+                              }
+                              return url;
+                            })()}
                             alt={selectedMovie.title}
                             className="w-32 h-48 object-cover rounded-lg border-2 border-blue-500 shadow-lg"
                             onError={(e) => {
                               console.error('Erreur de chargement de l\'image:', selectedMovie.poster_url);
-                              // Afficher un placeholder au lieu de cacher l'image
-                              e.target.src = 'https://via.placeholder.com/200x300/1e3a8a/ffffff?text=Affiche+non+disponible';
+                              // Remplacer par un placeholder SVG inline
+                              e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzFlM2E4YSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5BZmZpY2hlIG5vbiBkaXNwb25pYmxlPC90ZXh0Pjwvc3ZnPg==';
                               e.target.onerror = null; // Éviter la boucle infinie
                             }}
                             onLoad={() => {

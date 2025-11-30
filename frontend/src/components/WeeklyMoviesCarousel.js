@@ -135,13 +135,23 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
               {currentItem.content.poster_url ? (
                 <div className="flex justify-center lg:justify-start">
                   <img 
-                    src={currentItem.content.poster_url} 
+                    src={(() => {
+                      const url = currentItem.content.poster_url;
+                      if (url && url.includes('canva.com/design/')) {
+                        const proxyUrl = process.env.REACT_APP_CANVA_PROXY_URL;
+                        if (proxyUrl) {
+                          const proxyEndpoint = proxyUrl.endsWith('/') ? proxyUrl.slice(0, -1) : proxyUrl;
+                          return `${proxyEndpoint}/?url=${encodeURIComponent(url)}`;
+                        }
+                      }
+                      return url;
+                    })()}
                     alt={currentItem.content.title}
                     className="w-48 h-72 object-cover rounded-lg border-4 border-blue-400 shadow-xl transition-transform hover:scale-105"
                     onError={(e) => {
                       console.error('Erreur de chargement de l\'image:', currentItem.content.poster_url);
-                      // Afficher un placeholder au lieu de cacher l'image
-                      e.target.src = 'https://via.placeholder.com/300x450/1e3a8a/ffffff?text=Affiche+non+disponible';
+                      // Remplacer par un placeholder SVG inline
+                      e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQ1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQ1MCIgZmlsbD0iIzFlM2E4YSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5BZmZpY2hlIG5vbiBkaXNwb25pYmxlPC90ZXh0Pjwvc3ZnPg==';
                       e.target.onerror = null; // Éviter la boucle infinie
                     }}
                     onLoad={() => {

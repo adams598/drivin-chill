@@ -421,6 +421,10 @@ const MovieManagement = () => {
                   placeholder="https://example.com/poster.jpg"
                   className="bg-gray-700 border-gray-600 text-white"
                 />
+                <p className="text-xs text-gray-400 mt-1">
+                  ⚠️ Important : Utilisez l'URL directe de l'image (qui se termine par .jpg, .png, etc.). 
+                  Pour Canva, exportez l'image et utilisez l'URL de l'image exportée, pas l'URL de la page de design.
+                </p>
               </div>
               
               <div className="col-span-2 space-y-2">

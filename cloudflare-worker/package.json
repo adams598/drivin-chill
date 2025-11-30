@@ -1,0 +1,22 @@
+{
+  "name": "canva-image-proxy",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker pour convertir les URLs Canva en images directes",
+  "main": "canva-image-proxy.js",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "keywords": [
+    "canva",
+    "proxy",
+    "image",
+    "cloudflare-worker"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}
+

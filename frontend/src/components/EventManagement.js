@@ -404,6 +404,10 @@ const EventManagement = () => {
                   className="bg-gray-700 border-gray-600 text-white"
                   placeholder="https://example.com/poster.jpg"
                 />
+                <p className="text-xs text-gray-400 mt-1">
+                  ⚠️ Important : Utilisez l'URL directe de l'image (qui se termine par .jpg, .png, etc.). 
+                  Pour Canva, exportez l'image et utilisez l'URL de l'image exportée, pas l'URL de la page de design.
+                </p>
               </div>
 
               <div className="flex space-x-2">
