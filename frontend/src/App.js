@@ -1138,7 +1138,7 @@ function App() {
                     Adresse du cinéma :
                   </h3>
                   <p className="text-blue-200">
-                    10 rue de dion bouton, 87280 Limoges
+                  Le petit juillac 87100 Limoges
                   </p>
                 </div>
               </div>
