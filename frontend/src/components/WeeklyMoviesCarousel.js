@@ -1,11 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Badge } from './ui/badge';
-import { Button } from './ui/button';
-import { ChevronLeft, ChevronRight, Calendar, Clock, Film, Play } from 'lucide-react';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Calendar,
+  Clock,
+  Film,
+  Play,
+} from "lucide-react";
+import { format } from "date-fns";
+import { fr } from "date-fns/locale";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -25,7 +32,7 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
     if (!autoPlay || weeklySchedule.length <= 1) return;
 
     const interval = setInterval(() => {
-      setCurrentIndex(prevIndex => 
+      setCurrentIndex((prevIndex) =>
         prevIndex === weeklySchedule.length - 1 ? 0 : prevIndex + 1
       );
     }, 5000);
@@ -38,14 +45,14 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
     try {
       const response = await axios.get(`${API}/weekly-schedule`);
       // Filter only movies
-      const movieSchedules = response.data.filter(item => 
-        item.schedule.content_type === 'movie'
+      const movieSchedules = response.data.filter(
+        (item) => item.schedule.content_type === "movie"
       );
-      console.log('🎬 Movies found from API:', movieSchedules.length); // Debug log
-      console.log('📽️ Movie data:', movieSchedules); // Debug log
+      console.log("🎬 Movies found from API:", movieSchedules.length); // Debug log
+      console.log("📽️ Movie data:", movieSchedules); // Debug log
       setWeeklySchedule(movieSchedules);
     } catch (error) {
-      console.error('Error fetching weekly schedule:', error);
+      console.error("Error fetching weekly schedule:", error);
     } finally {
       setLoading(false);
     }
@@ -53,7 +60,7 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
 
   const handlePrevious = () => {
     setAutoPlay(false); // Stop auto-play when user manually navigates
-    setCurrentIndex(prevIndex => 
+    setCurrentIndex((prevIndex) =>
       prevIndex === 0 ? weeklySchedule.length - 1 : prevIndex - 1
     );
     // Resume auto-play after 10 seconds
@@ -62,7 +69,7 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
 
   const handleNext = () => {
     setAutoPlay(false); // Stop auto-play when user manually navigates
-    setCurrentIndex(prevIndex => 
+    setCurrentIndex((prevIndex) =>
       prevIndex === weeklySchedule.length - 1 ? 0 : prevIndex + 1
     );
     // Resume auto-play after 10 seconds
@@ -76,7 +83,7 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
         selectedDate: scheduleItem.schedule.date,
         selectedTimeSlot: scheduleItem.schedule.time_slot,
         selectedMovie: scheduleItem.content,
-        schedule: scheduleItem.schedule
+        schedule: scheduleItem.schedule,
       };
       onMovieSelect(bookingData);
     }
@@ -87,20 +94,28 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
     if (schedule.entry_time && schedule.start_time) {
       return `Entrée: ${schedule.entry_time} • Film: ${schedule.start_time}`;
     }
-    
+
     // Sinon utiliser les paramètres par défaut du créneau
     const timeSlot = schedule.time_slot || schedule;
     if (!timeSlotSettings) return timeSlot;
-    
-    if (timeSlot === '21h15' || timeSlot === timeSlotSettings?.first_slot_value) {
+
+    if (
+      timeSlot === "21h15" ||
+      timeSlot === timeSlotSettings?.first_slot_value
+    ) {
       return `Entrée: ${timeSlotSettings.first_slot_entry_time} • Film: ${timeSlotSettings.first_slot_start_time}`;
-    } else if (timeSlot === '23h45' || timeSlot === timeSlotSettings?.second_slot_value) {
+    } else if (
+      timeSlot === "23h45" ||
+      timeSlot === timeSlotSettings?.second_slot_value
+    ) {
       return `Entrée: ${timeSlotSettings.second_slot_entry_time} • Film: ${timeSlotSettings.second_slot_start_time}`;
     } else {
-      return `Entrée: ${timeSlotSettings.third_slot_entry_time || '23h15'} • Film: ${timeSlotSettings.third_slot_start_time || '23h30'}`;
+      return `Entrée: ${
+        timeSlotSettings.third_slot_entry_time || "23h15"
+      } • Film: ${timeSlotSettings.third_slot_start_time || "23h30"}`;
     }
   };
-  
+
   // Fonction pour obtenir l'heure de début à afficher
   const getStartTimeDisplay = (schedule) => {
     if (schedule.start_time) return schedule.start_time;
@@ -112,7 +127,9 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
   if (loading) {
     return (
       <div className="text-center py-12">
-        <div className="text-white text-lg">Chargement de la programmation...</div>
+        <div className="text-white text-lg">
+          Chargement de la programmation...
+        </div>
       </div>
     );
   }
@@ -121,8 +138,12 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
     return (
       <div className="text-center py-12">
         <Film className="mx-auto h-16 w-16 text-gray-400 mb-4" />
-        <h3 className="text-white text-xl font-bold mb-2">Aucun film programmé</h3>
-        <p className="text-gray-300">La programmation de films sera bientôt disponible.</p>
+        <h3 className="text-white text-xl font-bold mb-2">
+          Aucun film programmé
+        </h3>
+        <p className="text-gray-300">
+          La programmation de films sera bientôt disponible.
+        </p>
       </div>
     );
   }
@@ -137,53 +158,76 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
           <div className="flex items-center justify-center mb-2">
             <Calendar className="mr-2 h-6 w-6 text-blue-300" />
             <CardTitle className="text-white text-2xl font-bold">
-              🎬 Films à l'Affiche - Semaine du {format(new Date(weeklySchedule[0]?.schedule.date), 'dd MMMM', { locale: fr })}
+              🎬 Films à l'Affiche - Semaine du{" "}
+              {format(new Date(weeklySchedule[0]?.schedule.date), "dd MMMM", {
+                locale: fr,
+              })}
             </CardTitle>
           </div>
           <p className="text-blue-200">
-            {weeklySchedule.length} {weeklySchedule.length > 1 ? 'films programmés' : 'film programmé'} • Défilement automatique
+            {weeklySchedule.length}{" "}
+            {weeklySchedule.length > 1 ? "films programmés" : "film programmé"}{" "}
+            • Défilement automatique
           </p>
         </CardHeader>
-        
+
         <CardContent className="p-6">
           {currentItem && (
             <div className="space-y-6">
-              {/* Title and Director */}
-              <div>
-                <h3 className="text-white text-3xl font-bold mb-2 text-center">{currentItem.content.title}</h3>
-                {currentItem.content.director && (
-                  <p className="text-blue-200 text-lg mb-3 text-center">
-                    Réalisé par {currentItem.content.director} ({currentItem.content.release_year})
-                  </p>
-                )}
-                
-                {/* Movie Badges */}
-                <div className="flex flex-wrap gap-2 mb-4 justify-center">
-                  <Badge variant="secondary" className="bg-blue-600 text-blue-100 text-sm px-3 py-1">
-                    {currentItem.content.duration_minutes} min
-                  </Badge>
-                  <Badge variant="secondary" className="bg-purple-600 text-purple-100 text-sm px-3 py-1">
-                    {currentItem.content.genre}
-                  </Badge>
-                  <Badge variant="secondary" className="bg-green-600 text-green-100 text-sm px-3 py-1">
-                    {currentItem.content.age_rating?.replace('_', ' ')}
-                  </Badge>
+              {/* Movie Details */}
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-white text-3xl font-bold mb-2">
+                    {currentItem.content.title}
+                  </h3>
+                  {currentItem.content.director && (
+                    <p className="text-blue-200 text-lg mb-3">
+                      Réalisé par {currentItem.content.director} (
+                      {currentItem.content.release_year})
+                    </p>
+                  )}
+
+                  {/* Movie Badges */}
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    <Badge
+                      variant="secondary"
+                      className="bg-blue-600 text-blue-100 text-sm px-3 py-1"
+                    >
+                      {currentItem.content.duration_minutes} min
+                    </Badge>
+                    <Badge
+                      variant="secondary"
+                      className="bg-purple-600 text-purple-100 text-sm px-3 py-1"
+                    >
+                      {currentItem.content.genre}
+                    </Badge>
+                    <Badge
+                      variant="secondary"
+                      className="bg-green-600 text-green-100 text-sm px-3 py-1"
+                    >
+                      {currentItem.content.age_rating?.replace("_", " ")}
+                    </Badge>
+                  </div>
                 </div>
               </div>
 
-              {/* Movie Poster - Now below the title */}
+              {/* Movie Poster */}
               {currentItem.content.poster_url ? (
                 <div className="flex justify-center">
-                  <img 
+                  <img
                     src={(() => {
                       const url = currentItem.content.poster_url;
-                      if (url && url.includes('canva.com/design/')) {
+                      if (url && url.includes("canva.com/design/")) {
                         const proxyUrl = process.env.REACT_APP_CANVA_PROXY_URL;
                         if (proxyUrl) {
                           // Nettoyer l'URL du proxy (enlever les paramètres existants)
-                          let cleanProxyUrl = proxyUrl.split('?')[0]; // Enlever tout ce qui suit le ?
-                          cleanProxyUrl = cleanProxyUrl.endsWith('/') ? cleanProxyUrl.slice(0, -1) : cleanProxyUrl;
-                          return `${cleanProxyUrl}/?url=${encodeURIComponent(url)}`;
+                          let cleanProxyUrl = proxyUrl.split("?")[0]; // Enlever tout ce qui suit le ?
+                          cleanProxyUrl = cleanProxyUrl.endsWith("/")
+                            ? cleanProxyUrl.slice(0, -1)
+                            : cleanProxyUrl;
+                          return `${cleanProxyUrl}/?url=${encodeURIComponent(
+                            url
+                          )}`;
                         }
                       }
                       return url;
@@ -193,39 +237,49 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
                     onError={(e) => {
                       const originalUrl = currentItem.content.poster_url;
                       const currentSrc = e.target.src;
-                      console.error('Erreur de chargement de l\'image:', {
+                      console.error("Erreur de chargement de l'image:", {
                         original: originalUrl,
                         current: currentSrc,
-                        isCanva: originalUrl && originalUrl.includes('canva.com'),
-                        hasProxy: !!process.env.REACT_APP_CANVA_PROXY_URL
+                        isCanva:
+                          originalUrl && originalUrl.includes("canva.com"),
+                        hasProxy: !!process.env.REACT_APP_CANVA_PROXY_URL,
                       });
-                      
+
                       // Si c'est une URL Canva et que le proxy n'est pas configuré
-                      if (originalUrl && originalUrl.includes('canva.com') && !process.env.REACT_APP_CANVA_PROXY_URL) {
-                        console.warn('⚠️ URL Canva détectée mais REACT_APP_CANVA_PROXY_URL n\'est pas configuré dans .env');
+                      if (
+                        originalUrl &&
+                        originalUrl.includes("canva.com") &&
+                        !process.env.REACT_APP_CANVA_PROXY_URL
+                      ) {
+                        console.warn(
+                          "⚠️ URL Canva détectée mais REACT_APP_CANVA_PROXY_URL n'est pas configuré dans .env"
+                        );
                       }
-                      
+
                       // Remplacer par un placeholder SVG inline
-                      e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQ1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQ1MCIgZmlsbD0iIzFlM2E4YSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5BZmZpY2hlIG5vbiBkaXNwb25pYmxlPC90ZXh0Pjwvc3ZnPg==';
+                      e.target.src =
+                        "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQ1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQ1MCIgZmlsbD0iIzFlM2E4YSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5BZmZpY2hlIG5vbiBkaXNwb25pYmxlPC90ZXh0Pjwvc3ZnPg==";
                       e.target.onerror = null; // Éviter la boucle infinie
                     }}
                     onLoad={() => {
-                      console.log('Image chargée avec succès:', currentItem.content.poster_url);
+                      console.log(
+                        "Image chargée avec succès:",
+                        currentItem.content.poster_url
+                      );
                     }}
                     loading="lazy"
                   />
                 </div>
               ) : (
                 <div className="flex justify-center items-center w-48 h-72 bg-gray-700 rounded-lg border-4 border-blue-400 mx-auto">
-                  <span className="text-gray-400 text-xs text-center px-2">Aucune affiche</span>
+                  <span className="text-gray-400 text-xs text-center px-2">
+                    Aucune affiche
+                  </span>
                 </div>
               )}
-              
-              {/* Movie Details */}
-              <div className="space-y-4">
-                
-                {/* Synopsis */}
-                <div>
+               
+               {/* Synopsis */}
+               <div>
                   <h4 className="text-blue-100 font-semibold mb-2 text-lg">
                     Synopsis :
                   </h4>
@@ -239,7 +293,12 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <div>
                       <div className="text-green-100 font-semibold text-lg">
-                        📅 {format(new Date(currentItem.schedule.date), 'EEEE dd MMMM yyyy', { locale: fr })}
+                        📅{" "}
+                        {format(
+                          new Date(currentItem.schedule.date),
+                          "EEEE dd MMMM yyyy",
+                          { locale: fr }
+                        )}
                       </div>
                       <div className="text-green-200 text-base">
                         🕐 {getDisplayTime(currentItem.schedule)}
@@ -249,17 +308,24 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
                       <div className="text-green-100 font-semibold text-lg">
                         {(() => {
                           const timeSlot = currentItem.schedule.time_slot;
-                          if (timeSlot === '21h15' || timeSlot === timeSlotSettings?.first_slot_value) {
-                            return 'Première séance';
-                          } else if (timeSlot === '23h45' || timeSlot === timeSlotSettings?.second_slot_value) {
-                            return 'Deuxième séance';
+                          if (
+                            timeSlot === "21h15" ||
+                            timeSlot === timeSlotSettings?.first_slot_value
+                          ) {
+                            return "Première séance";
+                          } else if (
+                            timeSlot === "23h45" ||
+                            timeSlot === timeSlotSettings?.second_slot_value
+                          ) {
+                            return "Deuxième séance";
                           } else {
-                            return 'Troisième séance';
+                            return "Troisième séance";
                           }
                         })()}
                       </div>
                       <div className="text-green-200 text-sm">
-                        Capacité : {currentItem.schedule.capacity || 21} voitures
+                        Capacité : {currentItem.schedule.capacity || 21}{" "}
+                        voitures
                       </div>
                     </div>
                   </div>
@@ -272,10 +338,15 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
                       <Play className="mr-2 h-5 w-5" />
                       Bande-annonce :
                     </h4>
-                    <div className="relative w-full" style={{paddingBottom: '56.25%'}}>
+                    <div
+                      className="relative w-full"
+                      style={{ paddingBottom: "56.25%" }}
+                    >
                       <iframe
                         className="absolute top-0 left-0 w-full h-full rounded-lg"
-                        src={currentItem.content.trailer_url.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/')}
+                        src={currentItem.content.trailer_url
+                          .replace("watch?v=", "embed/")
+                          .replace("youtu.be/", "youtube.com/embed/")}
                         title={`Bande-annonce ${currentItem.content.title}`}
                         frameBorder="0"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
@@ -292,7 +363,6 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
                 >
                   🎫 Réserver pour ce film
                 </Button>
-              </div>
             </div>
           )}
         </CardContent>
@@ -309,7 +379,7 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          
+
           <div className="flex items-center space-x-2">
             {weeklySchedule.map((_, index) => (
               <button
@@ -320,12 +390,12 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
                   setTimeout(() => setAutoPlay(true), 10000);
                 }}
                 className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                  index === currentIndex ? 'bg-blue-500' : 'bg-gray-400'
+                  index === currentIndex ? "bg-blue-500" : "bg-gray-400"
                 }`}
               />
             ))}
           </div>
-          
+
           <Button
             onClick={handleNext}
             variant="outline"
@@ -342,12 +412,12 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
         <button
           onClick={() => setAutoPlay(!autoPlay)}
           className={`text-sm px-3 py-1 rounded-full transition-all duration-300 ${
-            autoPlay 
-              ? 'bg-green-600 text-green-100' 
-              : 'bg-gray-600 text-gray-300'
+            autoPlay
+              ? "bg-green-600 text-green-100"
+              : "bg-gray-600 text-gray-300"
           }`}
         >
-          {autoPlay ? '⏸️ Pause auto' : '▶️ Lecture auto'}
+          {autoPlay ? "⏸️ Pause auto" : "▶️ Lecture auto"}
         </button>
       </div>
     </div>
