@@ -103,63 +103,63 @@ export const getImageUrlHelpMessage = (url) => {
 
   const cleanedUrl = cleanImageUrl(url);
 
-//   if (isCanvaUrl(cleanedUrl)) {
-//     const proxyUrl = process.env.REACT_APP_CANVA_PROXY_URL;
+  //   if (isCanvaUrl(cleanedUrl)) {
+  //     const proxyUrl = process.env.REACT_APP_CANVA_PROXY_URL;
 
-//     // if (proxyUrl) {
-//     //   return {
-//     //     type: "info",
-//     //     message: "✅ URL Canva détectée - Conversion automatique activée !",
-//     //     explanation:
-//     //       "Votre URL Canva sera automatiquement convertie en image via le proxy Cloudflare Worker.",
-//     //     note: "L'image s'affichera automatiquement. Aucune action requise de votre part !",
-//     //   };
-//     // }
+  //     // if (proxyUrl) {
+  //     //   return {
+  //     //     type: "info",
+  //     //     message: "✅ URL Canva détectée - Conversion automatique activée !",
+  //     //     explanation:
+  //     //       "Votre URL Canva sera automatiquement convertie en image via le proxy Cloudflare Worker.",
+  //     //     note: "L'image s'affichera automatiquement. Aucune action requise de votre part !",
+  //     //   };
+  //     // }
 
-//     return {
-//       type: "error",
-//       message:
-//         "❌ Cette URL Canva ne peut PAS être utilisée directement comme image.",
-//       explanation:
-//         "Les URLs Canva pointent vers une page web, pas vers une image. Le navigateur ne peut pas afficher une page web comme une image.",
-//       quickSolution: {
-//         title: "🚀 Solution rapide (2 minutes) :",
-//         steps: [
-//           {
-//             step: "1. Ouvrez votre design Canva",
-//             detail: "Cliquez sur le lien que vous avez collé",
-//           },
-//           {
-//             step: "2. Téléchargez l'image",
-//             detail:
-//               'Cliquez sur "Partager" → "Télécharger" → Choisissez JPG ou PNG',
-//           },
-//           {
-//             step: "3. Uploadez sur Imgur",
-//             detail:
-//               'Allez sur imgur.com → "New post" → Glissez votre image → Copiez l\'URL directe',
-//           },
-//           {
-//             step: "4. Collez la nouvelle URL",
-//             detail:
-//               "L'URL Imgur se termine par .jpg ou .png et fonctionnera parfaitement !",
-//           },
-//         ],
-//       },
-//       alternatives: [
-//         "💡 Alternative : Configurez un Cloudflare Worker pour conversion automatique (voir README)",
-//       ],
-//     };
-//   }
+  //     return {
+  //       type: "error",
+  //       message:
+  //         "❌ Cette URL Canva ne peut PAS être utilisée directement comme image.",
+  //       explanation:
+  //         "Les URLs Canva pointent vers une page web, pas vers une image. Le navigateur ne peut pas afficher une page web comme une image.",
+  //       quickSolution: {
+  //         title: "🚀 Solution rapide (2 minutes) :",
+  //         steps: [
+  //           {
+  //             step: "1. Ouvrez votre design Canva",
+  //             detail: "Cliquez sur le lien que vous avez collé",
+  //           },
+  //           {
+  //             step: "2. Téléchargez l'image",
+  //             detail:
+  //               'Cliquez sur "Partager" → "Télécharger" → Choisissez JPG ou PNG',
+  //           },
+  //           {
+  //             step: "3. Uploadez sur Imgur",
+  //             detail:
+  //               'Allez sur imgur.com → "New post" → Glissez votre image → Copiez l\'URL directe',
+  //           },
+  //           {
+  //             step: "4. Collez la nouvelle URL",
+  //             detail:
+  //               "L'URL Imgur se termine par .jpg ou .png et fonctionnera parfaitement !",
+  //           },
+  //         ],
+  //       },
+  //       alternatives: [
+  //         "💡 Alternative : Configurez un Cloudflare Worker pour conversion automatique (voir README)",
+  //       ],
+  //     };
+  //   }
 
-  if (!isDirectImageUrl(cleanedUrl) && cleanedUrl.startsWith("http")) {
-    return {
-      type: "warning",
-      message: "⚠️ Cette URL ne semble pas être une URL d'image directe.",
-      explanation:
-        "Les URLs d'images directes se terminent généralement par .jpg, .png, .gif, .webp, etc.",
-    };
-  }
+  //   if (!isDirectImageUrl(cleanedUrl) && cleanedUrl.startsWith("http")) {
+  //     return {
+  //       type: "warning",
+  //       message: "⚠️ Cette URL ne semble pas être une URL d'image directe.",
+  //       explanation:
+  //         "Les URLs d'images directes se terminent généralement par .jpg, .png, .gif, .webp, etc.",
+  //     };
+  //   }
 
   return null;
 };
