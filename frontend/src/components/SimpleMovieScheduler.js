@@ -262,21 +262,34 @@ const SimpleMovieScheduler = () => {
     try {
       setLoading(true);
       
-      const data = {
-        movie_id: scheduleFormData.movie_id,
-        date: scheduleFormData.date,
-        time_slot: scheduleFormData.time_slot,
-        entry_time: scheduleFormData.entry_time || null,
-        start_time: scheduleFormData.start_time || null,
-        capacity: parseInt(scheduleFormData.capacity)
-      };
-
       if (editingSchedule) {
-        // Mise à jour
-        console.log('📤 Envoi PUT /api/movie-schedules/' + editingSchedule.schedule.id);
-        console.log('Données:', data);
+        // Mise à jour - envoyer seulement les champs modifiés
+        const updateData = {};
         
-        await axios.put(`${API}/movie-schedules/${editingSchedule.schedule.id}`, data, { 
+        // Comparer avec les valeurs existantes et n'envoyer que ce qui a changé
+        if (scheduleFormData.movie_id !== editingSchedule.schedule.movie_id) {
+          updateData.movie_id = scheduleFormData.movie_id;
+        }
+        if (scheduleFormData.date !== editingSchedule.schedule.date.split('T')[0]) {
+          updateData.date = scheduleFormData.date;
+        }
+        if (scheduleFormData.time_slot !== editingSchedule.schedule.time_slot) {
+          updateData.time_slot = scheduleFormData.time_slot;
+        }
+        if (scheduleFormData.entry_time !== (editingSchedule.schedule.entry_time || '')) {
+          updateData.entry_time = scheduleFormData.entry_time || null;
+        }
+        if (scheduleFormData.start_time !== (editingSchedule.schedule.start_time || '')) {
+          updateData.start_time = scheduleFormData.start_time || null;
+        }
+        if (parseInt(scheduleFormData.capacity) !== (editingSchedule.schedule.capacity || 21)) {
+          updateData.capacity = parseInt(scheduleFormData.capacity);
+        }
+        
+        console.log('📤 Envoi PUT /api/movie-schedules/' + editingSchedule.schedule.id);
+        console.log('Données:', updateData);
+        
+        await axios.put(`${API}/movie-schedules/${editingSchedule.schedule.id}`, updateData, { 
           headers,
           timeout: 10000
         });
@@ -285,6 +298,15 @@ const SimpleMovieScheduler = () => {
         toast.success('✅ Programmation modifiée avec succès !');
       } else {
         // Création
+        const data = {
+          movie_id: scheduleFormData.movie_id,
+          date: scheduleFormData.date,
+          time_slot: scheduleFormData.time_slot,
+          entry_time: scheduleFormData.entry_time || null,
+          start_time: scheduleFormData.start_time || null,
+          capacity: parseInt(scheduleFormData.capacity)
+        };
+        
         console.log('📤 Envoi POST /api/movie-schedules');
         console.log('Données:', data);
         

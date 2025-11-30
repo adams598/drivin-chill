@@ -459,6 +459,12 @@ class MovieScheduleUpdate(BaseModel):
     start_time: Optional[str] = None
     capacity: Optional[int] = None
 
+    @validator("time_slot", pre=True)
+    def _normalize_time_slot(cls, value):
+        if value is None:
+            return None
+        return normalize_time_slot_value(value)
+
 class MovieScheduleWithMovie(BaseModel):
     schedule: MovieSchedule
     movie: Movie
