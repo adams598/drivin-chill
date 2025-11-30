@@ -58,6 +58,25 @@ import {
 } from "lucide-react";
 import { format, addDays, isAfter, isBefore, startOfDay } from "date-fns";
 import { fr } from "date-fns/locale";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+import icon from "leaflet/dist/images/marker-icon.png";
+import iconShadow from "leaflet/dist/images/marker-shadow.png";
+import iconRetina from "leaflet/dist/images/marker-icon-2x.png";
+
+// Fix pour les icônes Leaflet dans React
+let DefaultIcon = L.icon({
+  iconUrl: icon,
+  iconRetinaUrl: iconRetina,
+  shadowUrl: iconShadow,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  tooltipAnchor: [16, -28],
+  shadowSize: [41, 41],
+});
+L.Marker.prototype.options.icon = DefaultIcon;
 
 // Import new components
 import QRCodeGenerator from "./components/QRCodeGenerator";
@@ -1578,9 +1597,29 @@ function App() {
               <h3 className="text-2xl font-bold text-white mb-4">
                 Notre adresse
               </h3>
-              <p className="text-gray-300 text-lg">
+              <p className="text-gray-300 text-lg mb-6">
                 <strong>Le petit juillac 87100 Limoges</strong>
               </p>
+              <div className="mt-8 rounded-lg overflow-hidden shadow-2xl border-2 border-gray-700">
+                <MapContainer
+                  center={[45.8336, 1.2611]}
+                  zoom={15}
+                  style={{ height: "400px", width: "100%", zIndex: 0 }}
+                  scrollWheelZoom={true}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <Marker position={[45.8336, 1.2611]}>
+                    <Popup>
+                      <strong>Le petit juillac</strong>
+                      <br />
+                      87100 Limoges, France
+                    </Popup>
+                  </Marker>
+                </MapContainer>
+              </div>
             </div>
           </div>
 
