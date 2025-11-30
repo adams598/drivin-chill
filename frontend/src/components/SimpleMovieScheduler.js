@@ -1188,7 +1188,13 @@ const SimpleMovieScheduler = () => {
                     <strong className="text-gray-800">
                       {schedule.movie.title}
                     </strong>{" "}
-                    - {schedule.schedule.date} à {schedule.schedule.time_slot}
+                    - {schedule.schedule.date}
+                    {schedule.schedule.entry_time &&
+                    schedule.schedule.start_time ? (
+                      <> à {schedule.schedule.start_time}</>
+                    ) : (
+                      <> à {schedule.schedule.time_slot}</>
+                    )}
                     <br />
                     <small className="text-gray-600">
                       Capacité: {schedule.schedule.capacity} places
@@ -1196,7 +1202,7 @@ const SimpleMovieScheduler = () => {
                         schedule.schedule.start_time && (
                           <>
                             {" "}
-                            • Entrée: {schedule.schedule.entry_time} • Début:{" "}
+                            · Entrée: {schedule.schedule.entry_time} · Début:{" "}
                             {schedule.schedule.start_time}
                           </>
                         )}
@@ -1218,6 +1224,7 @@ const SimpleMovieScheduler = () => {
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
+                  y
                 </div>
               ))}
             </div>

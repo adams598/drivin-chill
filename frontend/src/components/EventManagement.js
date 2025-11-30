@@ -642,7 +642,18 @@ const EventManagement = () => {
                       {format(new Date(item.schedule.date), 'PPP', { locale: fr })}
                     </TableCell>
                     <TableCell className="text-gray-300">
-                      {item.schedule.custom_time || item.schedule.time_slot}
+                      {item.schedule.custom_time 
+                        ? item.schedule.custom_time
+                        : (item.schedule.start_time 
+                          ? item.schedule.start_time
+                          : (item.schedule.entry_time 
+                            ? item.schedule.entry_time
+                            : item.schedule.time_slot))}
+                      {item.schedule.entry_time && item.schedule.start_time && !item.schedule.custom_time && (
+                        <span className="text-gray-400 text-xs block">
+                          Entrée: {item.schedule.entry_time}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="text-gray-300">
                       <Badge className="bg-blue-600 text-white">

@@ -1905,20 +1905,25 @@ function App() {
                                   )}
                                 </div>
                                 <div className="text-sm text-gray-300">
-                                  {isHalloween
+                                  {schedule.schedule.start_time
+                                    ? schedule.schedule.start_time
+                                    : schedule.schedule.entry_time
+                                    ? schedule.schedule.entry_time
+                                    : isHalloween
                                     ? mapTimeSlotToHalloween(
                                         schedule.schedule.time_slot
                                       )
                                     : schedule.schedule.time_slot}
                                 </div>
                                 <div className="text-sm text-gray-400">
-                                  {
-                                    getTimeSlots().find(
-                                      (slot) =>
-                                        slot.value ===
-                                        schedule.schedule.time_slot
-                                    )?.label
-                                  }
+                                  {schedule.schedule.entry_time &&
+                                  schedule.schedule.start_time
+                                    ? `Entrée: ${schedule.schedule.entry_time} • Début: ${schedule.schedule.start_time}`
+                                    : getTimeSlots().find(
+                                        (slot) =>
+                                          slot.value ===
+                                          schedule.schedule.time_slot
+                                      )?.label || schedule.schedule.time_slot}
                                 </div>
                                 <div className="text-sm font-medium text-blue-400 mt-1">
                                   🎬 {schedule.movie.title}

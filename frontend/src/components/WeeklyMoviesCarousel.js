@@ -82,14 +82,31 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
     }
   };
 
-  const getDisplayTime = (timeSlot) => {
+  const getDisplayTime = (schedule) => {
+    // Prioriser les horaires réels si disponibles
+    if (schedule.entry_time && schedule.start_time) {
+      return `Entrée: ${schedule.entry_time} • Film: ${schedule.start_time}`;
+    }
+    
+    // Sinon utiliser les paramètres par défaut du créneau
+    const timeSlot = schedule.time_slot || schedule;
     if (!timeSlotSettings) return timeSlot;
     
-    if (timeSlot === '21h15') {
+    if (timeSlot === '21h15' || timeSlot === timeSlotSettings?.first_slot_value) {
       return `Entrée: ${timeSlotSettings.first_slot_entry_time} • Film: ${timeSlotSettings.first_slot_start_time}`;
-    } else {
+    } else if (timeSlot === '23h45' || timeSlot === timeSlotSettings?.second_slot_value) {
       return `Entrée: ${timeSlotSettings.second_slot_entry_time} • Film: ${timeSlotSettings.second_slot_start_time}`;
+    } else {
+      return `Entrée: ${timeSlotSettings.third_slot_entry_time || '23h15'} • Film: ${timeSlotSettings.third_slot_start_time || '23h30'}`;
     }
+  };
+  
+  // Fonction pour obtenir l'heure de début à afficher
+  const getStartTimeDisplay = (schedule) => {
+    if (schedule.start_time) return schedule.start_time;
+    if (schedule.entry_time) return schedule.entry_time;
+    const timeSlot = schedule.time_slot || schedule;
+    return timeSlot;
   };
 
   if (loading) {
@@ -223,12 +240,21 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
                         📅 {format(new Date(currentItem.schedule.date), 'EEEE dd MMMM yyyy', { locale: fr })}
                       </div>
                       <div className="text-green-200 text-base">
-                        🕐 {getDisplayTime(currentItem.schedule.time_slot)}
+                        🕐 {getDisplayTime(currentItem.schedule)}
                       </div>
                     </div>
                     <div className="text-right">
                       <div className="text-green-100 font-semibold text-lg">
-                        {currentItem.schedule.time_slot === '21h15' ? 'Première séance' : 'Deuxième séance'}
+                        {(() => {
+                          const timeSlot = currentItem.schedule.time_slot;
+                          if (timeSlot === '21h15' || timeSlot === timeSlotSettings?.first_slot_value) {
+                            return 'Première séance';
+                          } else if (timeSlot === '23h45' || timeSlot === timeSlotSettings?.second_slot_value) {
+                            return 'Deuxième séance';
+                          } else {
+                            return 'Troisième séance';
+                          }
+                        })()}
                       </div>
                       <div className="text-green-200 text-sm">
                         Capacité : {currentItem.schedule.capacity || 21} voitures
