@@ -55,6 +55,8 @@ import {
   Users,
   Building2,
   Moon,
+  Lock,
+  Lightbulb,
 } from "lucide-react";
 import { format, addDays, isAfter, isBefore, startOfDay } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -1545,23 +1547,24 @@ function App() {
               {/* Booking Rules Notice */}
               <div className="bg-blue-900 border border-blue-600 rounded-lg p-6 mt-8 max-w-2xl mx-auto">
                 <h4 className="text-blue-100 font-bold text-lg mb-3 text-center flex items-center justify-center">
-                  <Clock className="mr-2 h-5 w-5" />⏰ Nouvelle règle de
-                  réservation
+                  <Clock className="mr-2 h-5 w-5" />⏰ Règle de réservation
                 </h4>
-                <div className="text-center space-y-2">
-                  <p className="text-blue-100 text-base font-semibold">
+                <div className="text-center space-y-3">
+                  <p className="text-blue-100 text-base font-semibold flex items-center justify-center">
+                    <Lock className="mr-2 h-5 w-5 text-yellow-400" />
                     🔒 Les réservations ferment automatiquement{" "}
                     <span className="text-yellow-300">
-                      8h avant chaque séance
+                      2h avant chaque séance
                     </span>
                   </p>
                   <p className="text-blue-200 text-sm">
                     Cette mesure nous permet de mieux organiser les séances et
                     d'assurer la meilleure expérience possible.
                   </p>
-                  <p className="text-blue-300 text-xs">
-                    Pensez à réserver à l'avance ! Les places étant limitées (21
-                    voitures), nous recommandons de réserver dès que possible.
+                  <p className="text-blue-100 text-base font-semibold flex items-center justify-center">
+                    <Lightbulb className="mr-2 h-5 w-5 text-yellow-400" />
+                    💡 Tarif : 17€ par voiture • La capacité varie selon la
+                    séance. Pensez à réserver à l'avance !
                   </p>
                 </div>
               </div>

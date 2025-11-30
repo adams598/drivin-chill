@@ -147,10 +147,33 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
         
         <CardContent className="p-6">
           {currentItem && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Movie Poster */}
+            <div className="space-y-6">
+              {/* Title and Director */}
+              <div>
+                <h3 className="text-white text-3xl font-bold mb-2 text-center">{currentItem.content.title}</h3>
+                {currentItem.content.director && (
+                  <p className="text-blue-200 text-lg mb-3 text-center">
+                    Réalisé par {currentItem.content.director} ({currentItem.content.release_year})
+                  </p>
+                )}
+                
+                {/* Movie Badges */}
+                <div className="flex flex-wrap gap-2 mb-4 justify-center">
+                  <Badge variant="secondary" className="bg-blue-600 text-blue-100 text-sm px-3 py-1">
+                    {currentItem.content.duration_minutes} min
+                  </Badge>
+                  <Badge variant="secondary" className="bg-purple-600 text-purple-100 text-sm px-3 py-1">
+                    {currentItem.content.genre}
+                  </Badge>
+                  <Badge variant="secondary" className="bg-green-600 text-green-100 text-sm px-3 py-1">
+                    {currentItem.content.age_rating?.replace('_', ' ')}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Movie Poster - Now below the title */}
               {currentItem.content.poster_url ? (
-                <div className="flex justify-center lg:justify-start">
+                <div className="flex justify-center">
                   <img 
                     src={(() => {
                       const url = currentItem.content.poster_url;
@@ -193,34 +216,13 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
                   />
                 </div>
               ) : (
-                <div className="flex justify-center lg:justify-start items-center w-48 h-72 bg-gray-700 rounded-lg border-4 border-blue-400">
+                <div className="flex justify-center items-center w-48 h-72 bg-gray-700 rounded-lg border-4 border-blue-400 mx-auto">
                   <span className="text-gray-400 text-xs text-center px-2">Aucune affiche</span>
                 </div>
               )}
               
               {/* Movie Details */}
-              <div className={`${currentItem.content.poster_url ? 'lg:col-span-2' : 'lg:col-span-3'} space-y-4`}>
-                <div>
-                  <h3 className="text-white text-3xl font-bold mb-2">{currentItem.content.title}</h3>
-                  {currentItem.content.director && (
-                    <p className="text-blue-200 text-lg mb-3">
-                      Réalisé par {currentItem.content.director} ({currentItem.content.release_year})
-                    </p>
-                  )}
-                  
-                  {/* Movie Badges */}
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    <Badge variant="secondary" className="bg-blue-600 text-blue-100 text-sm px-3 py-1">
-                      {currentItem.content.duration_minutes} min
-                    </Badge>
-                    <Badge variant="secondary" className="bg-purple-600 text-purple-100 text-sm px-3 py-1">
-                      {currentItem.content.genre}
-                    </Badge>
-                    <Badge variant="secondary" className="bg-green-600 text-green-100 text-sm px-3 py-1">
-                      {currentItem.content.age_rating?.replace('_', ' ')}
-                    </Badge>
-                  </div>
-                </div>
+              <div className="space-y-4">
                 
                 {/* Synopsis */}
                 <div>
