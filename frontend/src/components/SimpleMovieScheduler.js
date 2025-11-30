@@ -732,47 +732,16 @@ const SimpleMovieScheduler = () => {
               <label className="block text-sm font-medium mb-2 text-gray-700">Date *</label>
               <div className="relative">
                 <input 
-                  type="text"
-                  value={(() => {
-                    if (!scheduleFormData.date) return '';
-                    // Convertir YYYY-MM-DD en jj/mm/aaaa
-                    const dateParts = scheduleFormData.date.split('-');
-                    if (dateParts.length === 3) {
-                      return `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
-                    }
-                    return scheduleFormData.date;
-                  })()}
+                  type="date"
+                  value={scheduleFormData.date || ''}
                   onChange={(e) => {
-                    const value = e.target.value;
-                    // Accepter le format jj/mm/aaaa et le convertir en YYYY-MM-DD
-                    const dateMatch = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-                    if (dateMatch) {
-                      const [, day, month, year] = dateMatch;
-                      const dateStr = `${year}-${month}-${day}`;
-                      // Vérifier que la date est valide
-                      const date = new Date(dateStr);
-                      if (!isNaN(date.getTime())) {
-                        setScheduleFormData({...scheduleFormData, date: dateStr});
-                      }
-                    } else if (value === '') {
-                      setScheduleFormData({...scheduleFormData, date: ''});
-                    }
+                    setScheduleFormData({...scheduleFormData, date: e.target.value});
                   }}
-                  onBlur={(e) => {
-                    // Si le format n'est pas correct, essayer de le corriger
-                    const value = e.target.value;
-                    if (value && !value.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-                      // Essayer de convertir depuis un format date natif
-                      const dateMatch = value.match(/(\d{4})-(\d{2})-(\d{2})/);
-                      if (dateMatch) {
-                        const [, year, month, day] = dateMatch;
-                        e.target.value = `${day}/${month}/${year}`;
-                      }
-                    }
-                  }}
-                  placeholder="jj/mm/aaaa"
                   className="w-full p-2 border rounded text-gray-800 pr-10"
                   required
+                  style={{
+                    colorScheme: 'light'
+                  }}
                 />
                 <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 pointer-events-none">
                   📅
