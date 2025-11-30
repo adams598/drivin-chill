@@ -311,6 +311,7 @@ class TimeSlotSettings(BaseModel):
     third_slot_entry_time: str = "23h15"   # 15min avant 23h30
     third_slot_start_time: str = "23h30"   # FILM 3: 23H30 - 01H30
     third_slot_end_time: str = "01h30"    # Fin de la troisième séance
+    booking_closing_hours: float = 2.0    # Nombre d'heures avant la séance où la billetterie se ferme
     is_active: bool = True
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -329,6 +330,7 @@ class TimeSlotSettingsUpdate(BaseModel):
     third_slot_entry_time: Optional[str] = None
     third_slot_start_time: Optional[str] = None
     third_slot_end_time: Optional[str] = None
+    booking_closing_hours: Optional[float] = None
     is_active: Optional[bool] = None
 
 # Models for promo codes
@@ -598,7 +600,8 @@ async def get_time_slot_settings():
             second_slot_end_time="23h15",
             third_slot_entry_time="23h15",
             third_slot_start_time="23h30",
-            third_slot_end_time="01h30"
+            third_slot_end_time="01h30",
+            booking_closing_hours=2.0
         )
     try:
         settings = await db.time_slot_settings.find_one({"is_active": True})
@@ -928,7 +931,7 @@ async def create_booking(booking_data: TicketBookingCreate):
         if booking_data.booking_date < datetime.now(timezone.utc).date():
             raise HTTPException(status_code=400, detail="Impossible de réserver pour une date passée")
         
-        # Check 8-hour booking cutoff
+        # Check 2-hour booking cutoff
         time_settings = await get_time_slot_settings()
         
         # Determine the exact show start time based on time slot
@@ -952,7 +955,7 @@ async def create_booking(booking_data: TicketBookingCreate):
         time_until_show = show_datetime_utc - now_utc
         hours_until_show = time_until_show.total_seconds() / 3600
         
-        # We'll check the 8-hour rule later, after calculating if it's a free booking
+        # We'll check the 2-hour rule later, after calculating if it's a free booking
         if hours_until_show < 0:
             raise HTTPException(status_code=400, detail="Cette séance a déjà eu lieu.")
         
@@ -1075,16 +1078,19 @@ async def create_booking(booking_data: TicketBookingCreate):
         if booking_data.final_price is not None:
             final_price = booking_data.final_price
         
-        # Now check the 8-hour rule, with exception for free bookings
-        if final_price > 0 and hours_until_show <= 8 and hours_until_show >= 0:
+        # Get booking closing hours from settings (default to 2 hours)
+        booking_closing_hours = time_settings.booking_closing_hours if hasattr(time_settings, 'booking_closing_hours') and time_settings.booking_closing_hours is not None else 2.0
+        
+        # Now check the booking closing rule, with exception for free bookings
+        if final_price > 0 and hours_until_show <= booking_closing_hours and hours_until_show >= 0:
             raise HTTPException(
                 status_code=400, 
-                detail=f"Les réservations ferment 8h avant la séance. Cette séance commence dans {round(hours_until_show, 1)}h. Réservations fermées."
+                detail=f"Les réservations ferment {booking_closing_hours}h avant la séance. Cette séance commence dans {round(hours_until_show, 1)}h. Réservations fermées."
             )
         
-        # For free bookings (final_price == 0), we allow booking even within 8h
-        if final_price <= 0 and hours_until_show <= 8 and hours_until_show >= 0:
-            logging.info(f"Exception 24h pour réservation gratuite: {booking_data.first_name} {booking_data.last_name} - Prix final: {final_price}€")
+        # For free bookings (final_price == 0), we allow booking even within the closing window
+        if final_price <= 0 and hours_until_show <= booking_closing_hours and hours_until_show >= 0:
+            logging.info(f"Exception {booking_closing_hours}h pour réservation gratuite: {booking_data.first_name} {booking_data.last_name} - Prix final: {final_price}€")
         
         # Create booking object
         booking_dict = booking_data.dict()
@@ -1208,9 +1214,12 @@ async def check_availability(booking_date: str, time_slot: TimeSlot):
         time_until_show = show_datetime_utc - now_utc
         hours_until_show = time_until_show.total_seconds() / 3600
         
-        # Check if we're within 24 hours of the show
-        is_within_24h = hours_until_show <= 24 and hours_until_show >= 0
-        has_booking_window_closed = hours_until_show <= 24
+        # Get booking closing hours from settings (default to 2 hours)
+        booking_closing_hours = time_settings.booking_closing_hours if hasattr(time_settings, 'booking_closing_hours') and time_settings.booking_closing_hours is not None else 2.0
+        
+        # Check if we're within the booking closing window
+        is_within_closing_window = hours_until_show <= booking_closing_hours and hours_until_show >= 0
+        has_booking_window_closed = hours_until_show <= booking_closing_hours
         
         # Count existing bookings for that date and time
         booking_count = await db.bookings.count_documents({
@@ -1251,7 +1260,7 @@ async def check_availability(booking_date: str, time_slot: TimeSlot):
         # Determine closure reason
         closure_reason = None
         if has_booking_window_closed and hours_until_show >= 0:
-            closure_reason = "booking_closed_24h"
+            closure_reason = "booking_closed_2h"
         elif hours_until_show < 0:
             closure_reason = "show_has_passed"
         elif not is_spots_available:
@@ -1267,7 +1276,7 @@ async def check_availability(booking_date: str, time_slot: TimeSlot):
             "hours_until_show": round(hours_until_show, 1),
             "closure_reason": closure_reason,
             "show_datetime": show_datetime_utc.isoformat(),
-            "booking_closes_at": (show_datetime_utc - timedelta(hours=24)).isoformat()
+            "booking_closes_at": (show_datetime_utc - timedelta(hours=booking_closing_hours)).isoformat()
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors de la vérification de disponibilité: {str(e)}")
@@ -2194,7 +2203,8 @@ async def get_public_time_slots():
                 second_slot_end_time="23h15",
                 third_slot_entry_time="23h15",
                 third_slot_start_time="23h30",
-                third_slot_end_time="01h30"
+                third_slot_end_time="01h30",
+                booking_closing_hours=2.0
             )
         return settings
     except Exception as e:
@@ -2212,7 +2222,8 @@ async def get_public_time_slots():
             second_slot_end_time="23h15",
             third_slot_entry_time="23h15",
             third_slot_start_time="23h30",
-            third_slot_end_time="01h30"
+            third_slot_end_time="01h30",
+            booking_closing_hours=2.0
         )
 
 @api_router.post("/admin/test-email")

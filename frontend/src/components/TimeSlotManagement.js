@@ -30,7 +30,9 @@ const TimeSlotManagement = () => {
     // Horaires du troisième créneau
     third_slot_entry_time: '23h15',  // Halloween schedule
     third_slot_start_time: '23h30',  // FILM 3: 23H30 - 01H30
-    third_slot_end_time: '01h30'     // Fin de la troisième séance
+    third_slot_end_time: '01h30',    // Fin de la troisième séance
+    // Paramètres de fermeture de la billetterie
+    booking_closing_hours: 2.0       // Nombre d'heures avant la séance où la billetterie se ferme
   });
   const [testingEmail, setTestingEmail] = useState(false);
 
@@ -61,7 +63,8 @@ const TimeSlotManagement = () => {
         second_slot_end_time: response.data.second_slot_end_time || '23h15',
         third_slot_entry_time: response.data.third_slot_entry_time || '23h15',
         third_slot_start_time: response.data.third_slot_start_time || '23h30',
-        third_slot_end_time: response.data.third_slot_end_time || '01h30'
+        third_slot_end_time: response.data.third_slot_end_time || '01h30',
+        booking_closing_hours: response.data.booking_closing_hours || 2.0
       });
     } catch (error) {
       toast.error('Erreur lors du chargement des horaires');
@@ -225,7 +228,8 @@ const TimeSlotManagement = () => {
       second_slot_end_time: '23h15',
       third_slot_entry_time: '23h15',
       third_slot_start_time: '23h30',
-      third_slot_end_time: '01h30'
+      third_slot_end_time: '01h30',
+      booking_closing_hours: 2.0
     });
     toast.info('Horaires réinitialisés aux valeurs par défaut');
   };
@@ -447,6 +451,39 @@ const TimeSlotManagement = () => {
                 />
                 <p className="text-xs text-gray-400">Format: XXhXX (ex: 01h30)</p>
               </div>
+            </div>
+          </div>
+
+          {/* Booking Closing Hours Configuration */}
+          <div className="space-y-4">
+            <h3 className="text-white text-lg font-medium flex items-center">
+              🔒 Fermeture de la Billetterie
+            </h3>
+            <div className="bg-blue-900 border border-blue-600 rounded-lg p-4">
+              <Label className="text-blue-100 font-semibold">Délai de fermeture (en heures)</Label>
+              <Input
+                type="number"
+                step="0.5"
+                min="0.5"
+                max="24"
+                value={formData.booking_closing_hours}
+                onChange={(e) => {
+                  const value = parseFloat(e.target.value);
+                  if (!isNaN(value) && value >= 0.5 && value <= 24) {
+                    setFormData(prev => ({
+                      ...prev,
+                      booking_closing_hours: value
+                    }));
+                  }
+                }}
+                placeholder="2.0"
+                className="bg-gray-700 border-gray-600 text-white placeholder-gray-400 mt-2"
+              />
+              <p className="text-xs text-blue-200 mt-2">
+                La billetterie se fermera automatiquement {formData.booking_closing_hours} heure{formData.booking_closing_hours > 1 ? 's' : ''} avant chaque séance.
+                <br />
+                Les utilisateurs ne pourront plus réserver une fois ce délai atteint.
+              </p>
             </div>
           </div>
 

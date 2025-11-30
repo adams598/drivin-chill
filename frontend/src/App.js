@@ -540,7 +540,7 @@ function App() {
     return true;
   };
 
-  // Check if booking is closed due to 24h rule
+  // Check if booking is closed due to 2h rule
   const isBookingClosed = async (date, timeSlot) => {
     try {
       const dateStr = format(date, "yyyy-MM-dd");
@@ -1574,7 +1574,8 @@ function App() {
                   <p className="text-blue-100 text-base font-semibold">
                     🔒 Les réservations ferment automatiquement{" "}
                     <span className="text-yellow-300">
-                      2h avant chaque séance
+                      {timeSlotSettings?.booking_closing_hours || 2}h avant
+                      chaque séance
                     </span>
                   </p>
                   <p className="text-blue-200 text-sm">
@@ -2006,8 +2007,11 @@ function App() {
                                 </div>
                                 {isBookingClosed && (
                                   <div className="text-sm text-red-400 mt-1">
-                                    {closureReason === "booking_closed_8h" &&
-                                      "🔒 Réservations fermées (moins de 8h)"}
+                                    {closureReason === "booking_closed_2h" &&
+                                      `🔒 Réservations fermées (moins de ${
+                                        timeSlotSettings?.booking_closing_hours ||
+                                        2
+                                      }h)`}
                                     {closureReason === "show_has_passed" &&
                                       "⏰ Séance terminée"}
                                     {closureReason === "sold_out" &&
@@ -2019,9 +2023,13 @@ function App() {
                                     <div className="text-sm text-green-400 mt-1">
                                       ✅ {availability.available_spots} places
                                       disponibles
-                                      {availability.hours_until_show > 24 &&
+                                      {availability.hours_until_show >
+                                        (timeSlotSettings?.booking_closing_hours ||
+                                          2) &&
                                         ` • Fermeture dans ${Math.floor(
-                                          availability.hours_until_show - 24
+                                          availability.hours_until_show -
+                                            (timeSlotSettings?.booking_closing_hours ||
+                                              2)
                                         )}h`}
                                     </div>
                                   )}
@@ -2147,7 +2155,7 @@ function App() {
                               locale: fr,
                             }
                           )}{" "}
-                          • Créneau: {displayTimeSlot}
+                          • Créneau: {preFillData.schedule.start_time}
                         </p>
                       </div>
                     );
@@ -2162,7 +2170,9 @@ function App() {
                   <ul className="text-blue-200 text-xs space-y-1">
                     <li>
                       • <strong>Fermeture automatique :</strong> Les
-                      réservations ferment 8h avant chaque séance
+                      réservations ferment{" "}
+                      {timeSlotSettings?.booking_closing_hours || 2}h avant
+                      chaque séance
                     </li>
                     <li>
                       • <strong>Jours d'ouverture :</strong> Tous les jours de
