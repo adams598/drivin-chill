@@ -392,23 +392,24 @@ function App() {
     if (!timeSlotSettings) {
       // Fallback to Halloween schedule if settings not loaded
       // IMPORTANT: value MUST match backend enum (21h15, 23h45, 01h30)
+      // Fallback avec valeurs par défaut (sera remplacé par les valeurs configurables une fois chargées)
       return [
         {
-          value: "21h15", // Backend enum value
+          value: "21h15", // Valeur par défaut
           label: "Entrée : 18h45 • Film : 19h00-21h00",
           display: "1er Film",
           entry: "18h45",
           start: "19h00",
         },
         {
-          value: "23h45", // Backend enum value
+          value: "23h45", // Valeur par défaut
           label: "Entrée : 21h00 • Film : 21h15-23h15",
           display: "2ème Film",
           entry: "21h00",
           start: "21h15",
         },
         {
-          value: "01h30", // Backend enum value
+          value: "01h30", // Valeur par défaut
           label: "Entrée : 23h15 • Film : 23h30-01h30",
           display: "3ème Film",
           entry: "23h15",
@@ -419,34 +420,32 @@ function App() {
 
     const slots = [
       {
-        value: "21h15", // Backend enum value - First show
-        label: `Entrée : ${timeSlotSettings.first_slot_entry_time} • Film : ${timeSlotSettings.first_slot_start_time}-21h00`,
+        value: timeSlotSettings.first_slot_value || "21h15", // Configurable value - First show
+        label: `Entrée : ${timeSlotSettings.first_slot_entry_time} • Film : ${timeSlotSettings.first_slot_start_time}-${timeSlotSettings.first_slot_end_time || '21h00'}`,
         display: "1er Film",
         entry: timeSlotSettings.first_slot_entry_time,
         start: timeSlotSettings.first_slot_start_time,
+        end: timeSlotSettings.first_slot_end_time || '21h00',
       },
       {
-        value: "23h45", // Backend enum value - Second show
-        label: `Entrée : ${timeSlotSettings.second_slot_entry_time} • Film : ${timeSlotSettings.second_slot_start_time}-23h15`,
+        value: timeSlotSettings.second_slot_value || "23h45", // Configurable value - Second show
+        label: `Entrée : ${timeSlotSettings.second_slot_entry_time} • Film : ${timeSlotSettings.second_slot_start_time}-${timeSlotSettings.second_slot_end_time || '23h15'}`,
         display: "2ème Film",
         entry: timeSlotSettings.second_slot_entry_time,
         start: timeSlotSettings.second_slot_start_time,
+        end: timeSlotSettings.second_slot_end_time || '23h15',
       },
     ];
 
-    // Add third slot if available in settings
-    if (
-      timeSlotSettings.third_slot_entry_time &&
-      timeSlotSettings.third_slot_start_time
-    ) {
-      slots.push({
-        value: "01h30", // Backend enum value - Third show
-        label: `Entrée : ${timeSlotSettings.third_slot_entry_time} • Film : ${timeSlotSettings.third_slot_start_time}-01h30`,
-        display: "3ème Film",
-        entry: timeSlotSettings.third_slot_entry_time,
-        start: timeSlotSettings.third_slot_start_time,
-      });
-    }
+    // Toujours ajouter le 3ème créneau (avec valeurs par défaut si non définies)
+    slots.push({
+      value: timeSlotSettings.third_slot_value || "01h30", // Configurable value - Third show
+      label: `Entrée : ${timeSlotSettings.third_slot_entry_time || '23h15'} • Film : ${timeSlotSettings.third_slot_start_time || '23h30'}-${timeSlotSettings.third_slot_end_time || '01h30'}`,
+      display: "3ème Film",
+      entry: timeSlotSettings.third_slot_entry_time || '23h15',
+      start: timeSlotSettings.third_slot_start_time || '23h30',
+      end: timeSlotSettings.third_slot_end_time || '01h30',
+    });
 
     return slots;
   };
@@ -625,8 +624,12 @@ function App() {
       );
       setMovieSchedules(schedulesForDate); // Reuse the same state but with event data
 
-      // Also fetch availability info for each time slot
-      const availabilityPromises = ["21h15", "23h45"].map(async (timeSlot) => {
+      // Also fetch availability info for each time slot (using configurable values)
+      const timeSlotValues = timeSlotSettings ? [
+        timeSlotSettings.first_slot_value || "21h15",
+        timeSlotSettings.second_slot_value || "23h45"
+      ] : ["21h15", "23h45"];
+      const availabilityPromises = timeSlotValues.map(async (timeSlot) => {
         try {
           const availResponse = await axios.get(
             `${API}/availability?booking_date=${dateString}&time_slot=${timeSlot}`
@@ -658,8 +661,12 @@ function App() {
       );
       setMovieSchedules(response.data);
 
-      // Also fetch availability info for each time slot
-      const availabilityPromises = ["21h15", "23h45"].map(async (timeSlot) => {
+      // Also fetch availability info for each time slot (using configurable values)
+      const timeSlotValues = timeSlotSettings ? [
+        timeSlotSettings.first_slot_value || "21h15",
+        timeSlotSettings.second_slot_value || "23h45"
+      ] : ["21h15", "23h45"];
+      const availabilityPromises = timeSlotValues.map(async (timeSlot) => {
         try {
           const availResponse = await axios.get(
             `${API}/availability?booking_date=${dateString}&time_slot=${timeSlot}`
@@ -2064,21 +2071,32 @@ function App() {
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                      {selectedMovie.poster_url && (
+                      {selectedMovie.poster_url ? (
                         <div className="flex justify-center">
                           <img
                             src={selectedMovie.poster_url}
                             alt={selectedMovie.title}
                             className="w-32 h-48 object-cover rounded-lg border-2 border-blue-500 shadow-lg"
                             onError={(e) => {
-                              e.target.style.display = "none";
+                              console.error('Erreur de chargement de l\'image:', selectedMovie.poster_url);
+                              // Afficher un placeholder au lieu de cacher l'image
+                              e.target.src = 'https://via.placeholder.com/200x300/1e3a8a/ffffff?text=Affiche+non+disponible';
+                              e.target.onerror = null; // Éviter la boucle infinie
                             }}
+                            onLoad={() => {
+                              console.log('Image chargée avec succès:', selectedMovie.poster_url);
+                            }}
+                            loading="lazy"
                           />
+                        </div>
+                      ) : (
+                        <div className="flex justify-center items-center w-32 h-48 bg-gray-700 rounded-lg border-2 border-blue-500">
+                          <span className="text-gray-400 text-xs text-center px-2">Aucune affiche</span>
                         </div>
                       )}
                       <div
                         className={`${
-                          selectedMovie.poster_url
+                          selectedMovie.poster_url && selectedMovie.poster_url.trim()
                             ? "lg:col-span-2"
                             : "lg:col-span-3"
                         } space-y-4`}

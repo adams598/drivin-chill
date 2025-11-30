@@ -132,14 +132,27 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
           {currentItem && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Movie Poster */}
-              {currentItem.content.poster_url && (
+              {currentItem.content.poster_url ? (
                 <div className="flex justify-center lg:justify-start">
                   <img 
                     src={currentItem.content.poster_url} 
                     alt={currentItem.content.title}
                     className="w-48 h-72 object-cover rounded-lg border-4 border-blue-400 shadow-xl transition-transform hover:scale-105"
-                    onError={(e) => {e.target.style.display = 'none'}}
+                    onError={(e) => {
+                      console.error('Erreur de chargement de l\'image:', currentItem.content.poster_url);
+                      // Afficher un placeholder au lieu de cacher l'image
+                      e.target.src = 'https://via.placeholder.com/300x450/1e3a8a/ffffff?text=Affiche+non+disponible';
+                      e.target.onerror = null; // Éviter la boucle infinie
+                    }}
+                    onLoad={() => {
+                      console.log('Image chargée avec succès:', currentItem.content.poster_url);
+                    }}
+                    loading="lazy"
                   />
+                </div>
+              ) : (
+                <div className="flex justify-center lg:justify-start items-center w-48 h-72 bg-gray-700 rounded-lg border-4 border-blue-400">
+                  <span className="text-gray-400 text-xs text-center px-2">Aucune affiche</span>
                 </div>
               )}
               

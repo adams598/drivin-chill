@@ -111,25 +111,23 @@ const EventManagement = () => {
       ];
     }
 
-    // Always return backend enum values but with Halloween display labels
+    // Use configurable slot values with dynamic display labels
     const slots = [
       { 
-        value: "21h15",  // Backend enum value
-        label: "Entrée : 18h45 • Film : 19h00-21h00"  // Halloween display
+        value: timeSlotSettings.first_slot_value || "21h15",  // Configurable value
+        label: `Entrée : ${timeSlotSettings.first_slot_entry_time} • Film : ${timeSlotSettings.first_slot_start_time}-${timeSlotSettings.first_slot_end_time || '21h00'}`
       },
       { 
-        value: "23h45",  // Backend enum value
-        label: "Entrée : 21h00 • Film : 21h15-23h15"  // Halloween display
+        value: timeSlotSettings.second_slot_value || "23h45",  // Configurable value
+        label: `Entrée : ${timeSlotSettings.second_slot_entry_time} • Film : ${timeSlotSettings.second_slot_start_time}-${timeSlotSettings.second_slot_end_time || '23h15'}`
       }
     ];
 
-    // Add third slot if available
-    if (timeSlotSettings.third_slot_entry_time && timeSlotSettings.third_slot_start_time) {
-      slots.push({
-        value: "01h30",  // Backend enum value
-        label: "Entrée : 23h15 • Film : 23h30-01h30"  // Halloween display
-      });
-    }
+    // Toujours ajouter le 3ème créneau (avec valeurs par défaut si non définies)
+    slots.push({
+      value: timeSlotSettings.third_slot_value || "01h30",  // Configurable value
+      label: `Entrée : ${timeSlotSettings.third_slot_entry_time || '23h15'} • Film : ${timeSlotSettings.third_slot_start_time || '23h30'}-${timeSlotSettings.third_slot_end_time || '01h30'}`
+    });
 
     return slots;
   };
@@ -139,12 +137,18 @@ const EventManagement = () => {
     setLoading(true);
 
     try {
+      // Nettoyer les URLs (enlever les espaces)
+      const cleanedEventForm = {
+        ...eventForm,
+        poster_url: eventForm.poster_url ? eventForm.poster_url.trim() : null
+      };
+      
       if (editingEvent) {
-        const response = await axios.put(`${API}/events/${editingEvent.id}`, eventForm, { headers: authHeaders });
+        const response = await axios.put(`${API}/events/${editingEvent.id}`, cleanedEventForm, { headers: authHeaders });
         toast.success('Événement mis à jour avec succès !');
         setEditingEvent(null);
       } else {
-        const response = await axios.post(`${API}/events`, eventForm, { headers: authHeaders });
+        const response = await axios.post(`${API}/events`, cleanedEventForm, { headers: authHeaders });
         toast.success('Événement créé avec succès !');
       }
       

@@ -61,16 +61,58 @@ const SimpleMovieScheduler = () => {
     { value: 'interdit_moins_18', label: 'Interdit -18 ans' }
   ];
 
-  // Créneaux Halloween fixes - simples
-  const timeSlots = [
-    { value: '21h15', label: '1er Film - 19h00 (Entrée 18h45)' },
-    { value: '23h45', label: '2ème Film - 21h15 (Entrée 21h00)' },
-    { value: '01h30', label: '3ème Film - 23h30 (Entrée 23h15)' }
-  ];
+  const [timeSlotSettings, setTimeSlotSettings] = useState(null);
+
+  // Charger les paramètres de créneaux
+  useEffect(() => {
+    fetchTimeSlotSettings();
+  }, []);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  const fetchTimeSlotSettings = async () => {
+    try {
+      const response = await axios.get(`${API}/time-slots`);
+      setTimeSlotSettings(response.data);
+    } catch (error) {
+      console.error('Erreur lors du chargement des paramètres de créneaux:', error);
+    }
+  };
+
+  // Générer les créneaux dynamiquement basés sur les paramètres admin
+  const getTimeSlots = () => {
+    if (!timeSlotSettings) {
+      // Fallback si les paramètres ne sont pas chargés - toujours 3 créneaux
+      return [
+        { value: '21h15', label: '1er Film - 19h00 (Entrée 18h45)' },
+        { value: '23h45', label: '2ème Film - 21h15 (Entrée 21h00)' },
+        { value: '01h30', label: '3ème Film - 23h30 (Entrée 23h15)' }
+      ];
+    }
+
+    const slots = [
+      {
+        value: timeSlotSettings.first_slot_value || '21h15',
+        label: `Entrée : ${timeSlotSettings.first_slot_entry_time} • Film : ${timeSlotSettings.first_slot_start_time}-${timeSlotSettings.first_slot_end_time || '21h00'}`
+      },
+      {
+        value: timeSlotSettings.second_slot_value || '23h45',
+        label: `Entrée : ${timeSlotSettings.second_slot_entry_time} • Film : ${timeSlotSettings.second_slot_start_time}-${timeSlotSettings.second_slot_end_time || '23h15'}`
+      }
+    ];
+
+    // Toujours ajouter le 3ème créneau (avec valeurs par défaut si non définies)
+    slots.push({
+      value: timeSlotSettings.third_slot_value || '01h30',
+      label: `Entrée : ${timeSlotSettings.third_slot_entry_time || '23h15'} • Film : ${timeSlotSettings.third_slot_start_time || '23h30'}-${timeSlotSettings.third_slot_end_time || '01h30'}`
+    });
+
+    return slots;
+  };
+
+  const timeSlots = getTimeSlots();
 
   const loadData = async () => {
     try {
@@ -116,7 +158,10 @@ const SimpleMovieScheduler = () => {
       const data = {
         ...movieFormData,
         duration_minutes: parseInt(movieFormData.duration_minutes),
-        release_year: parseInt(movieFormData.release_year)
+        release_year: parseInt(movieFormData.release_year),
+        // Nettoyer les URLs (enlever les espaces)
+        poster_url: movieFormData.poster_url ? movieFormData.poster_url.trim() : '',
+        trailer_url: movieFormData.trailer_url ? movieFormData.trailer_url.trim() : ''
       };
 
       console.log('📤 Envoi:', editingMovie ? 'PUT' : 'POST', data);

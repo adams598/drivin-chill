@@ -295,22 +295,40 @@ class EventUpdate(BaseModel):
 # Models for system time slots management
 class TimeSlotSettings(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    # Valeurs des créneaux (identifiants configurables)
+    first_slot_value: str = "21h15"   # Identifiant du premier créneau (configurable)
+    second_slot_value: str = "23h45"  # Identifiant du deuxième créneau (configurable)
+    third_slot_value: str = "01h30"   # Identifiant du troisième créneau (configurable)
+    # Horaires du premier créneau
     first_slot_entry_time: str = "18h45"   # 15min avant 19h00
     first_slot_start_time: str = "19h00"   # FILM 1: 19H00 - 21H00
+    first_slot_end_time: str = "21h00"   # Fin de la première séance
+    # Horaires du deuxième créneau
     second_slot_entry_time: str = "21h00"  # 15min avant 21h15
     second_slot_start_time: str = "21h15"  # FILM 2: 21H15 - 23H15
+    second_slot_end_time: str = "23h15"   # Fin de la deuxième séance
+    # Horaires du troisième créneau
     third_slot_entry_time: str = "23h15"   # 15min avant 23h30
     third_slot_start_time: str = "23h30"   # FILM 3: 23H30 - 01H30
+    third_slot_end_time: str = "01h30"    # Fin de la troisième séance
     is_active: bool = True
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class TimeSlotSettingsUpdate(BaseModel):
+    # Valeurs des créneaux (identifiants configurables)
+    first_slot_value: Optional[str] = None
+    second_slot_value: Optional[str] = None
+    third_slot_value: Optional[str] = None
+    # Horaires
     first_slot_entry_time: Optional[str] = None
     first_slot_start_time: Optional[str] = None
+    first_slot_end_time: Optional[str] = None
     second_slot_entry_time: Optional[str] = None
     second_slot_start_time: Optional[str] = None
+    second_slot_end_time: Optional[str] = None
     third_slot_entry_time: Optional[str] = None
     third_slot_start_time: Optional[str] = None
+    third_slot_end_time: Optional[str] = None
     is_active: Optional[bool] = None
 
 # Models for promo codes
@@ -548,12 +566,18 @@ async def get_time_slot_settings():
         logging.warning("MongoDB non disponible - utilisation des paramètres par défaut")
         # Return default settings when MongoDB is not available
         return TimeSlotSettings(
+            first_slot_value="21h15",
+            second_slot_value="23h45",
+            third_slot_value="01h30",
             first_slot_entry_time="18h45",
             first_slot_start_time="19h00",
+            first_slot_end_time="21h00",
             second_slot_entry_time="21h00",
             second_slot_start_time="21h15",
+            second_slot_end_time="23h15",
             third_slot_entry_time="23h15",
-            third_slot_start_time="23h30"
+            third_slot_start_time="23h30",
+            third_slot_end_time="01h30"
         )
     try:
         settings = await db.time_slot_settings.find_one({"is_active": True})
@@ -2138,24 +2162,36 @@ async def get_public_time_slots():
         if settings is None:
             # Return default settings if MongoDB is not available
             return TimeSlotSettings(
+                first_slot_value="21h15",
+                second_slot_value="23h45",
+                third_slot_value="01h30",
                 first_slot_entry_time="18h45",
                 first_slot_start_time="19h00",
+                first_slot_end_time="21h00",
                 second_slot_entry_time="21h00",
                 second_slot_start_time="21h15",
+                second_slot_end_time="23h15",
                 third_slot_entry_time="23h15",
-                third_slot_start_time="23h30"
+                third_slot_start_time="23h30",
+                third_slot_end_time="01h30"
             )
         return settings
     except Exception as e:
         logging.error(f"Erreur lors de la récupération des horaires: {e}")
         # Return default settings on error
         return TimeSlotSettings(
+            first_slot_value="21h15",
+            second_slot_value="23h45",
+            third_slot_value="01h30",
             first_slot_entry_time="18h45",
             first_slot_start_time="19h00",
+            first_slot_end_time="21h00",
             second_slot_entry_time="21h00",
             second_slot_start_time="21h15",
+            second_slot_end_time="23h15",
             third_slot_entry_time="23h15",
-            third_slot_start_time="23h30"
+            third_slot_start_time="23h30",
+            third_slot_end_time="01h30"
         )
 
 @api_router.post("/admin/test-email")

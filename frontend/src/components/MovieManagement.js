@@ -143,13 +143,11 @@ const MovieManagement = () => {
       }
     ];
 
-    // Add third slot if available
-    if (timeSlotSettings.third_slot_entry_time && timeSlotSettings.third_slot_start_time) {
-      slots.push({
-        value: "01h30",  // Backend enum value
-        label: "Entrée : 23h15 • Film : 23h30-01h30"  // Halloween display
-      });
-    }
+    // Toujours ajouter le 3ème créneau (avec valeurs par défaut si non définies)
+    slots.push({
+      value: timeSlotSettings.third_slot_value || "01h30",  // Configurable value
+      label: `Entrée : ${timeSlotSettings.third_slot_entry_time || '23h15'} • Film : ${timeSlotSettings.third_slot_start_time || '23h30'}-${timeSlotSettings.third_slot_end_time || '01h30'}`
+    });
 
     return slots;
   };
@@ -181,7 +179,10 @@ const MovieManagement = () => {
       const movieData = {
         ...movieForm,
         duration_minutes: parseInt(movieForm.duration_minutes),
-        release_year: movieForm.release_year ? parseInt(movieForm.release_year) : null
+        release_year: movieForm.release_year ? parseInt(movieForm.release_year) : null,
+        // Nettoyer les URLs (enlever les espaces)
+        poster_url: movieForm.poster_url ? movieForm.poster_url.trim() : null,
+        trailer_url: movieForm.trailer_url ? movieForm.trailer_url.trim() : null
       };
 
       if (editingMovie) {
