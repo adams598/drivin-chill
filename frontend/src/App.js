@@ -2081,8 +2081,10 @@ function App() {
                               if (url && url.includes('canva.com/design/')) {
                                 const proxyUrl = process.env.REACT_APP_CANVA_PROXY_URL;
                                 if (proxyUrl) {
-                                  const proxyEndpoint = proxyUrl.endsWith('/') ? proxyUrl.slice(0, -1) : proxyUrl;
-                                  return `${proxyEndpoint}/?url=${encodeURIComponent(url)}`;
+                                  // Nettoyer l'URL du proxy (enlever les paramètres existants)
+                                  let cleanProxyUrl = proxyUrl.split('?')[0]; // Enlever tout ce qui suit le ?
+                                  cleanProxyUrl = cleanProxyUrl.endsWith('/') ? cleanProxyUrl.slice(0, -1) : cleanProxyUrl;
+                                  return `${cleanProxyUrl}/?url=${encodeURIComponent(url)}`;
                                 }
                               }
                               return url;
@@ -2090,7 +2092,20 @@ function App() {
                             alt={selectedMovie.title}
                             className="w-32 h-48 object-cover rounded-lg border-2 border-blue-500 shadow-lg"
                             onError={(e) => {
-                              console.error('Erreur de chargement de l\'image:', selectedMovie.poster_url);
+                              const originalUrl = selectedMovie.poster_url;
+                              const currentSrc = e.target.src;
+                              console.error('Erreur de chargement de l\'image:', {
+                                original: originalUrl,
+                                current: currentSrc,
+                                isCanva: originalUrl && originalUrl.includes('canva.com'),
+                                hasProxy: !!process.env.REACT_APP_CANVA_PROXY_URL
+                              });
+                              
+                              // Si c'est une URL Canva et que le proxy n'est pas configuré, afficher un message
+                              if (originalUrl && originalUrl.includes('canva.com') && !process.env.REACT_APP_CANVA_PROXY_URL) {
+                                console.warn('⚠️ URL Canva détectée mais REACT_APP_CANVA_PROXY_URL n\'est pas configuré dans .env');
+                              }
+                              
                               // Remplacer par un placeholder SVG inline
                               e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzFlM2E4YSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5BZmZpY2hlIG5vbiBkaXNwb25pYmxlPC90ZXh0Pjwvc3ZnPg==';
                               e.target.onerror = null; // Éviter la boucle infinie

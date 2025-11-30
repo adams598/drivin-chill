@@ -59,8 +59,10 @@ export const convertCanvaUrlToImage = (canvaUrl) => {
   }
 
   // Construire l'URL du proxy
-  const proxyEndpoint = proxyUrl.endsWith('/') ? proxyUrl.slice(0, -1) : proxyUrl;
-  return `${proxyEndpoint}/?url=${encodeURIComponent(canvaUrl)}`;
+  // Nettoyer l'URL du proxy (enlever les paramètres existants comme ?url=...)
+  let cleanProxyUrl = proxyUrl.split('?')[0]; // Enlever tout ce qui suit le ?
+  cleanProxyUrl = cleanProxyUrl.endsWith('/') ? cleanProxyUrl.slice(0, -1) : cleanProxyUrl;
+  return `${cleanProxyUrl}/?url=${encodeURIComponent(canvaUrl)}`;
 };
 
 /**
