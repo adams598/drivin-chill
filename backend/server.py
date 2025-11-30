@@ -2415,6 +2415,82 @@ async def get_schedules_by_date(schedule_date: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération: {str(e)}")
 
+@api_router.put("/movie-schedules/{schedule_id}", response_model=MovieSchedule)
+async def update_movie_schedule(schedule_id: str, update_data: MovieScheduleUpdate, admin = Depends(get_admin_user)):
+    try:
+        # Vérifier que la programmation existe
+        existing_schedule = await db.movie_schedules.find_one({"id": schedule_id, "is_active": True})
+        if not existing_schedule:
+            raise HTTPException(status_code=404, detail="Programmation non trouvée")
+        
+        # Vérifier si le film existe (si movie_id est modifié)
+        if update_data.movie_id:
+            movie = await db.movies.find_one({"id": update_data.movie_id, "is_active": True})
+            if not movie:
+                raise HTTPException(status_code=404, detail="Film non trouvé")
+        
+        # Préparer les données de mise à jour
+        update_dict = {k: v for k, v in update_data.dict().items() if v is not None}
+        if not update_dict:
+            raise HTTPException(status_code=400, detail="Aucune donnée à mettre à jour")
+        
+        # Si la date ou le time_slot est modifié, vérifier les conflits
+        new_date = update_dict.get("date")
+        new_time_slot = update_dict.get("time_slot")
+        
+        if new_date or new_time_slot:
+            # Utiliser les nouvelles valeurs ou les anciennes
+            check_date = new_date.isoformat() if new_date else existing_schedule.get("date")
+            check_time_slot = new_time_slot if new_time_slot else existing_schedule.get("time_slot")
+            
+            # Normaliser le time_slot
+            if isinstance(check_time_slot, str):
+                check_time_slot = normalize_time_slot_value(check_time_slot)
+            
+            # Vérifier les conflits (exclure la programmation actuelle)
+            existing = await db.movie_schedules.find_one({
+                "id": {"$ne": schedule_id},
+                "date": check_date,
+                "time_slot": check_time_slot,
+                "is_active": True
+            })
+            
+            existing_content = await db.content_schedules.find_one({
+                "date": check_date,
+                "time_slot": check_time_slot,
+                "is_active": True
+            })
+            
+            if existing or existing_content:
+                raise HTTPException(status_code=400, detail="Un contenu est déjà programmé à ce créneau")
+        
+        # Normaliser le time_slot si modifié
+        if "time_slot" in update_dict:
+            update_dict["time_slot"] = normalize_time_slot_value(update_dict["time_slot"])
+        
+        # Convertir la date en format ISO si modifiée
+        if "date" in update_dict:
+            update_dict["date"] = update_dict["date"].isoformat()
+        
+        # Mettre à jour dans MongoDB
+        update_mongo = prepare_for_mongo(update_dict)
+        result = await db.movie_schedules.update_one(
+            {"id": schedule_id},
+            {"$set": update_mongo}
+        )
+        
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Programmation non trouvée")
+        
+        # Récupérer la programmation mise à jour
+        updated_schedule = await db.movie_schedules.find_one({"id": schedule_id})
+        return MovieSchedule(**parse_from_mongo(updated_schedule))
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour: {str(e)}")
+
 @api_router.delete("/movie-schedules/{schedule_id}")
 async def delete_movie_schedule(schedule_id: str, admin = Depends(get_admin_user)):
     try:
