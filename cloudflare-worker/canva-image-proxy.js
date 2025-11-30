@@ -66,13 +66,19 @@ async function handleRequest(request) {
     const designId = canvaUrl.match(/\/design\/([A-Za-z0-9]+)/)?.[1]
 
     // Méthode 1: Chercher dans les balises meta og:image (priorité haute - image du design)
-    const ogImageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i)
-    if (ogImageMatch) {
-      imageUrl = ogImageMatch[1]
-      // Vérifier que l'image correspond au design (contient l'ID du design ou est une image Canva)
-      if (designId && !imageUrl.includes(designId) && !imageUrl.includes('canva.com')) {
-        // Si l'image og:image ne semble pas correspondre au design, continuer la recherche
-        imageUrl = null
+    // Canva utilise souvent og:image pour l'aperçu du design
+    const ogImageMatches = html.matchAll(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/gi)
+    for (const match of ogImageMatches) {
+      const candidate = match[1]
+      // Décoder les entités HTML
+      const decoded = candidate.replace(/&amp;/g, '&').replace(/&#39;/g, "'")
+      // Prioriser les images Canva CDN
+      if (decoded.includes('canva.com') || decoded.includes('cdn-canva.com')) {
+        imageUrl = decoded
+        break
+      } else if (!imageUrl) {
+        // Garder en fallback
+        imageUrl = decoded
       }
     }
 
@@ -107,7 +113,21 @@ async function handleRequest(request) {
       }
     }
 
-    // Méthode 4: Chercher des URLs d'images Canva CDN spécifiques au design
+    // Méthode 4: Chercher dans les données JSON embarquées (Canva stocke souvent l'image là)
+    if (!imageUrl) {
+      // Chercher des objets JSON avec des URLs d'images
+      const jsonMatches = html.matchAll(/<script[^>]*>([^<]*"image"[^<]*https?:\/\/[^"'\s<>]+\.(canva|cdn-canva)\.com[^"'\s<>]+\.(jpg|jpeg|png|webp)[^"'\s<>]*[^<]*)<\/script>/gi)
+      for (const match of jsonMatches) {
+        const jsonContent = match[1]
+        const imageUrlMatch = jsonContent.match(/https?:\/\/[^"'\s<>]+\.(canva|cdn-canva)\.com\/[^"'\s<>]+\.(jpg|jpeg|png|webp)/i)
+        if (imageUrlMatch) {
+          imageUrl = imageUrlMatch[0]
+          break
+        }
+      }
+    }
+
+    // Méthode 5: Chercher des URLs d'images Canva CDN spécifiques au design
     if (!imageUrl) {
       // Chercher des URLs qui contiennent l'ID du design
       if (designId) {
@@ -117,27 +137,47 @@ async function handleRequest(request) {
         }
       }
       
-      // Fallback : n'importe quelle image Canva CDN
+      // Fallback : n'importe quelle image Canva CDN (chercher toutes les occurrences)
       if (!imageUrl) {
-        const canvaImageMatch = html.match(/https?:\/\/[^"'\s<>]+\.(canva|cdn-canva)\.com\/[^"'\s<>]+\.(jpg|jpeg|png|webp)/i)
-        if (canvaImageMatch) {
-          imageUrl = canvaImageMatch[0]
-        }
+        const canvaImageMatches = html.matchAll(/https?:\/\/[^"'\s<>]+\.(canva|cdn-canva)\.com\/[^"'\s<>]+\.(jpg|jpeg|png|webp)/gi)
+        const candidates = Array.from(canvaImageMatches).map(m => m[0])
+        // Prioriser les URLs qui semblent être des images de design (pas des logos, etc.)
+        const designImage = candidates.find(url => 
+          url.includes('/design/') || 
+          url.includes('/templates/') ||
+          url.match(/\/[A-Za-z0-9]{10,}\.(jpg|jpeg|png|webp)/i)
+        )
+        imageUrl = designImage || candidates[0]
       }
     }
 
-    // Méthode 5: Chercher dans les attributs src des images (priorité basse)
+    // Méthode 6: Chercher dans les attributs src des images (priorité basse)
     if (!imageUrl) {
       const imgSrcMatches = html.matchAll(/<img[^>]+src=["']([^"']+\.(jpg|jpeg|png|webp))["']/gi)
       for (const match of imgSrcMatches) {
         const src = match[1]
+        // Décoder les entités HTML
+        const decodedSrc = src.replace(/&amp;/g, '&')
         // Prioriser les images Canva
-        if (src.includes('canva.com') || src.includes('cdn-canva.com')) {
-          imageUrl = src
+        if (decodedSrc.includes('canva.com') || decodedSrc.includes('cdn-canva.com')) {
+          imageUrl = decodedSrc
           break
         } else if (!imageUrl) {
           // Garder en fallback
-          imageUrl = src
+          imageUrl = decodedSrc
+        }
+      }
+    }
+
+    // Méthode 7: Chercher dans les attributs data-src (lazy loading)
+    if (!imageUrl) {
+      const dataSrcMatches = html.matchAll(/<img[^>]+data-src=["']([^"']+\.(jpg|jpeg|png|webp))["']/gi)
+      for (const match of dataSrcMatches) {
+        const src = match[1]
+        const decodedSrc = src.replace(/&amp;/g, '&')
+        if (decodedSrc.includes('canva.com') || decodedSrc.includes('cdn-canva.com')) {
+          imageUrl = decodedSrc
+          break
         }
       }
     }
@@ -163,13 +203,50 @@ async function handleRequest(request) {
 
     // Nettoyer l'URL de l'image (enlever les paramètres inutiles si nécessaire)
     let cleanImageUrl = imageUrl;
-    // Si l'URL contient des paramètres de taille, on peut les optimiser
-    if (cleanImageUrl.includes('?')) {
-      // Garder l'URL telle quelle pour l'instant
-    }
+    
+    // Décoder les entités HTML si nécessaire
+    cleanImageUrl = cleanImageUrl.replace(/&amp;/g, '&');
+    cleanImageUrl = cleanImageUrl.replace(/&lt;/g, '<');
+    cleanImageUrl = cleanImageUrl.replace(/&gt;/g, '>');
+    cleanImageUrl = cleanImageUrl.replace(/&quot;/g, '"');
+    cleanImageUrl = cleanImageUrl.replace(/&#39;/g, "'");
 
-    // Rediriger vers l'image directe avec CORS headers
-    return Response.redirect(cleanImageUrl, 302)
+    // Au lieu de rediriger, récupérer l'image et la servir directement
+    // Cela évite les problèmes de CORS et fonctionne mieux avec les balises <img>
+    try {
+      const imageResponse = await fetch(cleanImageUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://www.canva.com/',
+          'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8'
+        }
+      })
+
+      if (!imageResponse.ok) {
+        // Si l'image ne peut pas être récupérée, rediriger quand même
+        return Response.redirect(cleanImageUrl, 302)
+      }
+
+      // Récupérer l'image en tant que blob
+      const imageBlob = await imageResponse.blob()
+      
+      // Servir l'image directement avec les bons headers CORS
+      return new Response(imageBlob, {
+        status: 200,
+        headers: {
+          'Content-Type': imageResponse.headers.get('Content-Type') || 'image/jpeg',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET',
+          'Cache-Control': 'public, max-age=3600', // Cache pendant 1 heure
+          'X-Image-Source': 'canva-proxy',
+          'X-Original-URL': canvaUrl
+        }
+      })
+    } catch (imageError) {
+      // Si la récupération de l'image échoue, rediriger quand même
+      console.error('Erreur lors de la récupération de l\'image:', imageError)
+      return Response.redirect(cleanImageUrl, 302)
+    }
 
   } catch (error) {
     return new Response(`Error processing request: ${error.message}`, { 
