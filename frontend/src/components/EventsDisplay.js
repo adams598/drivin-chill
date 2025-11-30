@@ -79,34 +79,26 @@ const EventsDisplay = ({ onEventSelect, timeSlotSettings }) => {
   };
 
   const getDisplayTime = (schedule) => {
+    // Priorité aux horaires réels si disponibles
+    if (schedule.entry_time && schedule.start_time) {
+      return `Entrée: ${schedule.entry_time} • Début: ${schedule.start_time}`;
+    }
+    
     // For events with custom time, display the custom time
     if (schedule.custom_time) {
       return `Début: ${schedule.custom_time}`;
     }
     
-    // Prioriser les horaires réels si disponibles
-    if (schedule.entry_time && schedule.start_time) {
-      return `Entrée: ${schedule.entry_time} • Début: ${schedule.start_time}`;
-    }
-    
-    // Sinon utiliser les paramètres par défaut du créneau
+    // Fallback to standard time slots for legacy events
     if (!timeSlotSettings) return schedule.time_slot;
     
-    if (schedule.time_slot === '21h15' || schedule.time_slot === timeSlotSettings?.first_slot_value) {
+    if (schedule.time_slot === '21h15' || schedule.time_slot === timeSlotSettings.first_slot_value) {
       return `Entrée: ${timeSlotSettings.first_slot_entry_time} • Début: ${timeSlotSettings.first_slot_start_time}`;
-    } else if (schedule.time_slot === '23h45' || schedule.time_slot === timeSlotSettings?.second_slot_value) {
+    } else if (schedule.time_slot === '23h45' || schedule.time_slot === timeSlotSettings.second_slot_value) {
       return `Entrée: ${timeSlotSettings.second_slot_entry_time} • Début: ${timeSlotSettings.second_slot_start_time}`;
     } else {
-      return `Entrée: ${timeSlotSettings.third_slot_entry_time || '23h15'} • Début: ${timeSlotSettings.third_slot_start_time || '23h30'}`;
+      return `Entrée: ${timeSlotSettings.third_slot_entry_time || 'N/A'} • Début: ${timeSlotSettings.third_slot_start_time || 'N/A'}`;
     }
-  };
-  
-  // Fonction pour obtenir l'heure de début à afficher
-  const getStartTimeDisplay = (schedule) => {
-    if (schedule.custom_time) return schedule.custom_time;
-    if (schedule.start_time) return schedule.start_time;
-    if (schedule.entry_time) return schedule.entry_time;
-    return schedule.time_slot;
   };
 
   const getEventTypeIcon = (eventType) => {
@@ -267,17 +259,14 @@ const EventsDisplay = ({ onEventSelect, timeSlotSettings }) => {
                     <div className="text-right">
                       <div className="text-purple-100 font-semibold text-lg">
                         {currentEvent.schedule.custom_time 
-                          ? 'Événement spécial' 
-                          : (() => {
-                              const timeSlot = currentEvent.schedule.time_slot;
-                              if (timeSlot === '21h15' || timeSlot === timeSlotSettings?.first_slot_value) {
-                                return 'Première séance';
-                              } else if (timeSlot === '23h45' || timeSlot === timeSlotSettings?.second_slot_value) {
-                                return 'Deuxième séance';
-                              } else {
-                                return 'Troisième séance';
-                              }
-                            })()}
+                          ? 'Événement spécial'
+                          : currentEvent.schedule.start_time 
+                          ? `Film à ${currentEvent.schedule.start_time}`
+                          : (currentEvent.schedule.time_slot === '21h15' || currentEvent.schedule.time_slot === (timeSlotSettings?.first_slot_value || '21h15')
+                            ? 'Première séance'
+                            : currentEvent.schedule.time_slot === '23h45' || currentEvent.schedule.time_slot === (timeSlotSettings?.second_slot_value || '23h45')
+                            ? 'Deuxième séance'
+                            : 'Troisième séance')}
                       </div>
                       <div className="text-purple-200 text-sm">
                         Capacité : {currentEvent.schedule.capacity || 21} voitures

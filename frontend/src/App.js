@@ -496,6 +496,7 @@ function App() {
       movie: bookingData.selectedMovie,
       movieTitle: bookingData.selectedMovie.title,
       isEvent: bookingData.isEvent || false,
+      schedule: bookingData.schedule || null, // Inclure le schedule complet pour les horaires réels
     });
 
     // Load schedules for the selected date
@@ -1900,15 +1901,17 @@ function App() {
                             >
                               <div>
                                 <div className="font-medium">
-                                  {getTimeSlotDisplay(
-                                    schedule.schedule.time_slot
-                                  )}
+                                  {schedule.schedule.entry_time &&
+                                  schedule.schedule.start_time
+                                    ? `Entrée: ${schedule.schedule.entry_time} • Début: ${schedule.schedule.start_time}`
+                                    : getTimeSlotDisplay(
+                                        schedule.schedule.time_slot
+                                      )}
                                 </div>
                                 <div className="text-sm text-gray-300">
-                                  {schedule.schedule.start_time
-                                    ? schedule.schedule.start_time
-                                    : schedule.schedule.entry_time
-                                    ? schedule.schedule.entry_time
+                                  {schedule.schedule.entry_time &&
+                                  schedule.schedule.start_time
+                                    ? `Film à ${schedule.schedule.start_time}`
                                     : isHalloween
                                     ? mapTimeSlotToHalloween(
                                         schedule.schedule.time_slot
@@ -1918,12 +1921,14 @@ function App() {
                                 <div className="text-sm text-gray-400">
                                   {schedule.schedule.entry_time &&
                                   schedule.schedule.start_time
-                                    ? `Entrée: ${schedule.schedule.entry_time} • Début: ${schedule.schedule.start_time}`
+                                    ? `Capacité: ${
+                                        schedule.schedule.capacity || 21
+                                      } places`
                                     : getTimeSlots().find(
                                         (slot) =>
                                           slot.value ===
                                           schedule.schedule.time_slot
-                                      )?.label || schedule.schedule.time_slot}
+                                      )?.label}
                                 </div>
                                 <div className="text-sm font-medium text-blue-400 mt-1">
                                   🎬 {schedule.movie.title}
@@ -1976,22 +1981,31 @@ function App() {
                             ) : (
                               <>
                                 <div className="font-medium">
-                                  {getTimeSlotDisplay(preFillData.timeSlot)}
+                                  {preFillData.schedule?.entry_time &&
+                                  preFillData.schedule?.start_time
+                                    ? `Entrée: ${preFillData.schedule.entry_time} • Début: ${preFillData.schedule.start_time}`
+                                    : getTimeSlotDisplay(preFillData.timeSlot)}
                                 </div>
                                 <div className="text-sm text-gray-300">
-                                  {isHalloween
+                                  {preFillData.schedule?.entry_time &&
+                                  preFillData.schedule?.start_time
+                                    ? `Film à ${preFillData.schedule.start_time}`
+                                    : isHalloween
                                     ? mapTimeSlotToHalloween(
                                         preFillData.timeSlot
                                       )
                                     : preFillData.timeSlot}
                                 </div>
                                 <div className="text-sm text-gray-400">
-                                  {
-                                    getTimeSlots().find(
-                                      (slot) =>
-                                        slot.value === preFillData.timeSlot
-                                    )?.label
-                                  }
+                                  {preFillData.schedule?.entry_time &&
+                                  preFillData.schedule?.start_time
+                                    ? `Capacité: ${
+                                        preFillData.schedule.capacity || 21
+                                      } places`
+                                    : getTimeSlots().find(
+                                        (slot) =>
+                                          slot.value === preFillData.timeSlot
+                                      )?.label}
                                 </div>
                                 <div className="text-sm font-medium text-green-400 mt-1">
                                   ✅ {preFillData.movieTitle}

@@ -90,38 +90,29 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
   };
 
   const getDisplayTime = (schedule) => {
-    // Prioriser les horaires réels si disponibles
+    // Priorité aux horaires réels si disponibles
     if (schedule.entry_time && schedule.start_time) {
       return `Entrée: ${schedule.entry_time} • Film: ${schedule.start_time}`;
     }
 
-    // Sinon utiliser les paramètres par défaut du créneau
-    const timeSlot = schedule.time_slot || schedule;
-    if (!timeSlotSettings) return timeSlot;
+    // Sinon, utiliser les paramètres de créneaux
+    if (!timeSlotSettings) return schedule.time_slot;
 
     if (
-      timeSlot === "21h15" ||
-      timeSlot === timeSlotSettings?.first_slot_value
+      schedule.time_slot === "21h15" ||
+      schedule.time_slot === timeSlotSettings.first_slot_value
     ) {
       return `Entrée: ${timeSlotSettings.first_slot_entry_time} • Film: ${timeSlotSettings.first_slot_start_time}`;
     } else if (
-      timeSlot === "23h45" ||
-      timeSlot === timeSlotSettings?.second_slot_value
+      schedule.time_slot === "23h45" ||
+      schedule.time_slot === timeSlotSettings.second_slot_value
     ) {
       return `Entrée: ${timeSlotSettings.second_slot_entry_time} • Film: ${timeSlotSettings.second_slot_start_time}`;
     } else {
       return `Entrée: ${
-        timeSlotSettings.third_slot_entry_time || "23h15"
-      } • Film: ${timeSlotSettings.third_slot_start_time || "23h30"}`;
+        timeSlotSettings.third_slot_entry_time || "N/A"
+      } • Film: ${timeSlotSettings.third_slot_start_time || "N/A"}`;
     }
-  };
-
-  // Fonction pour obtenir l'heure de début à afficher
-  const getStartTimeDisplay = (schedule) => {
-    if (schedule.start_time) return schedule.start_time;
-    if (schedule.entry_time) return schedule.entry_time;
-    const timeSlot = schedule.time_slot || schedule;
-    return timeSlot;
   };
 
   if (loading) {
@@ -173,47 +164,10 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
 
         <CardContent className="p-6">
           {currentItem && (
-            <div className="space-y-6">
-              {/* Movie Details */}
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-white text-3xl font-bold mb-2">
-                    {currentItem.content.title}
-                  </h3>
-                  {currentItem.content.director && (
-                    <p className="text-blue-200 text-lg mb-3">
-                      Réalisé par {currentItem.content.director} (
-                      {currentItem.content.release_year})
-                    </p>
-                  )}
-
-                  {/* Movie Badges */}
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    <Badge
-                      variant="secondary"
-                      className="bg-blue-600 text-blue-100 text-sm px-3 py-1"
-                    >
-                      {currentItem.content.duration_minutes} min
-                    </Badge>
-                    <Badge
-                      variant="secondary"
-                      className="bg-purple-600 text-purple-100 text-sm px-3 py-1"
-                    >
-                      {currentItem.content.genre}
-                    </Badge>
-                    <Badge
-                      variant="secondary"
-                      className="bg-green-600 text-green-100 text-sm px-3 py-1"
-                    >
-                      {currentItem.content.age_rating?.replace("_", " ")}
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Movie Poster */}
               {currentItem.content.poster_url ? (
-                <div className="flex justify-center">
+                <div className="flex justify-center lg:justify-start">
                   <img
                     src={(() => {
                       const url = currentItem.content.poster_url;
@@ -271,97 +225,136 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
                   />
                 </div>
               ) : (
-                <div className="flex justify-center items-center w-48 h-72 bg-gray-700 rounded-lg border-4 border-blue-400 mx-auto">
+                <div className="flex justify-center lg:justify-start items-center w-48 h-72 bg-gray-700 rounded-lg border-4 border-blue-400">
                   <span className="text-gray-400 text-xs text-center px-2">
                     Aucune affiche
                   </span>
                 </div>
               )}
 
-              {/* Synopsis */}
-              <div>
-                <h4 className="text-blue-100 font-semibold mb-2 text-lg">
-                  Synopsis :
-                </h4>
-                <p className="text-blue-100 text-base leading-relaxed">
-                  {currentItem.content.synopsis}
-                </p>
-              </div>
-
-              {/* Schedule Info */}
-              <div className="bg-gradient-to-r from-green-800 to-teal-800 rounded-lg p-4">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div>
-                    <div className="text-green-100 font-semibold text-lg">
-                      📅{" "}
-                      {format(
-                        new Date(currentItem.schedule.date),
-                        "EEEE dd MMMM yyyy",
-                        { locale: fr }
-                      )}
-                    </div>
-                    <div className="text-green-200 text-base">
-                      🕐 {getDisplayTime(currentItem.schedule)}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-green-100 font-semibold text-lg">
-                      {(() => {
-                        const timeSlot = currentItem.schedule.time_slot;
-                        if (
-                          timeSlot === "21h15" ||
-                          timeSlot === timeSlotSettings?.first_slot_value
-                        ) {
-                          return "Première séance";
-                        } else if (
-                          timeSlot === "23h45" ||
-                          timeSlot === timeSlotSettings?.second_slot_value
-                        ) {
-                          return "Deuxième séance";
-                        } else {
-                          return "Troisième séance";
-                        }
-                      })()}
-                    </div>
-                    <div className="text-green-200 text-sm">
-                      Capacité : {currentItem.schedule.capacity || 21} voitures
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Trailer Section */}
-              {currentItem.content.trailer_url && (
-                <div>
-                  <h4 className="text-blue-100 font-semibold mb-3 text-lg flex items-center">
-                    <Play className="mr-2 h-5 w-5" />
-                    Bande-annonce :
-                  </h4>
-                  <div
-                    className="relative w-full"
-                    style={{ paddingBottom: "56.25%" }}
-                  >
-                    <iframe
-                      className="absolute top-0 left-0 w-full h-full rounded-lg"
-                      src={currentItem.content.trailer_url
-                        .replace("watch?v=", "embed/")
-                        .replace("youtu.be/", "youtube.com/embed/")}
-                      title={`Bande-annonce ${currentItem.content.title}`}
-                      frameBorder="0"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-                      allowFullScreen
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Booking Button */}
-              <Button
-                onClick={() => handleMovieClick(currentItem)}
-                className="w-full bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white text-lg py-3 transition-all duration-300 transform hover:scale-105"
+              {/* Movie Details */}
+              <div
+                className={`${
+                  currentItem.content.poster_url
+                    ? "lg:col-span-2"
+                    : "lg:col-span-3"
+                } space-y-4`}
               >
-                🎫 Réserver pour ce film
-              </Button>
+                <div>
+                  <h3 className="text-white text-3xl font-bold mb-2">
+                    {currentItem.content.title}
+                  </h3>
+                  {currentItem.content.director && (
+                    <p className="text-blue-200 text-lg mb-3">
+                      Réalisé par {currentItem.content.director} (
+                      {currentItem.content.release_year})
+                    </p>
+                  )}
+
+                  {/* Movie Badges */}
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    <Badge
+                      variant="secondary"
+                      className="bg-blue-600 text-blue-100 text-sm px-3 py-1"
+                    >
+                      {currentItem.content.duration_minutes} min
+                    </Badge>
+                    <Badge
+                      variant="secondary"
+                      className="bg-purple-600 text-purple-100 text-sm px-3 py-1"
+                    >
+                      {currentItem.content.genre}
+                    </Badge>
+                    <Badge
+                      variant="secondary"
+                      className="bg-green-600 text-green-100 text-sm px-3 py-1"
+                    >
+                      {currentItem.content.age_rating?.replace("_", " ")}
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Synopsis */}
+                <div>
+                  <h4 className="text-blue-100 font-semibold mb-2 text-lg">
+                    Synopsis :
+                  </h4>
+                  <p className="text-blue-100 text-base leading-relaxed">
+                    {currentItem.content.synopsis}
+                  </p>
+                </div>
+
+                {/* Schedule Info */}
+                <div className="bg-gradient-to-r from-green-800 to-teal-800 rounded-lg p-4">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <div className="text-green-100 font-semibold text-lg">
+                        📅{" "}
+                        {format(
+                          new Date(currentItem.schedule.date),
+                          "EEEE dd MMMM yyyy",
+                          { locale: fr }
+                        )}
+                      </div>
+                      <div className="text-green-200 text-base">
+                        🕐 {getDisplayTime(currentItem.schedule)}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-green-100 font-semibold text-lg">
+                        {currentItem.schedule.start_time
+                          ? `Film à ${currentItem.schedule.start_time}`
+                          : currentItem.schedule.time_slot === "21h15" ||
+                            currentItem.schedule.time_slot ===
+                              (timeSlotSettings?.first_slot_value || "21h15")
+                          ? "Première séance"
+                          : currentItem.schedule.time_slot === "23h45" ||
+                            currentItem.schedule.time_slot ===
+                              (timeSlotSettings?.second_slot_value || "23h45")
+                          ? "Deuxième séance"
+                          : "Troisième séance"}
+                      </div>
+                      <div className="text-green-200 text-sm">
+                        Capacité : {currentItem.schedule.capacity || 21}{" "}
+                        voitures
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Trailer Section */}
+                {currentItem.content.trailer_url && (
+                  <div>
+                    <h4 className="text-blue-100 font-semibold mb-3 text-lg flex items-center">
+                      <Play className="mr-2 h-5 w-5" />
+                      Bande-annonce :
+                    </h4>
+                    <div
+                      className="relative w-full"
+                      style={{ paddingBottom: "56.25%" }}
+                    >
+                      <iframe
+                        className="absolute top-0 left-0 w-full h-full rounded-lg"
+                        src={currentItem.content.trailer_url
+                          .replace("watch?v=", "embed/")
+                          .replace("youtu.be/", "youtube.com/embed/")}
+                        title={`Bande-annonce ${currentItem.content.title}`}
+                        frameBorder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+                        allowFullScreen
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Booking Button */}
+                <Button
+                  onClick={() => handleMovieClick(currentItem)}
+                  className="w-full bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white text-lg py-3 transition-all duration-300 transform hover:scale-105"
+                >
+                  🎫 Réserver pour ce film
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
