@@ -12,6 +12,7 @@ const SimpleMovieScheduler = () => {
   const [loading, setLoading] = useState(false);
   const [showMovieForm, setShowMovieForm] = useState(false);
   const [editingMovie, setEditingMovie] = useState(null);
+  const [editingSchedule, setEditingSchedule] = useState(null);
   
   const [movieFormData, setMovieFormData] = useState({
     title: '',
@@ -270,16 +271,31 @@ const SimpleMovieScheduler = () => {
         capacity: parseInt(scheduleFormData.capacity)
       };
 
-      console.log('📤 Envoi POST /api/movie-schedules');
-      console.log('Données:', data);
-      
-      await axios.post(`${API}/movie-schedules`, data, { 
-        headers,
-        timeout: 10000
-      });
-      
-      console.log('✅ Programmation créée');
-      toast.success('✅ Film programmé avec succès !');
+      if (editingSchedule) {
+        // Mise à jour
+        console.log('📤 Envoi PUT /api/movie-schedules/' + editingSchedule.schedule.id);
+        console.log('Données:', data);
+        
+        await axios.put(`${API}/movie-schedules/${editingSchedule.schedule.id}`, data, { 
+          headers,
+          timeout: 10000
+        });
+        
+        console.log('✅ Programmation modifiée');
+        toast.success('✅ Programmation modifiée avec succès !');
+      } else {
+        // Création
+        console.log('📤 Envoi POST /api/movie-schedules');
+        console.log('Données:', data);
+        
+        await axios.post(`${API}/movie-schedules`, data, { 
+          headers,
+          timeout: 10000
+        });
+        
+        console.log('✅ Programmation créée');
+        toast.success('✅ Film programmé avec succès !');
+      }
       
       // Reset
       setScheduleFormData({
@@ -290,6 +306,7 @@ const SimpleMovieScheduler = () => {
         start_time: '21h00',
         capacity: 21
       });
+      setEditingSchedule(null);
       
       await loadData();
       
@@ -302,6 +319,27 @@ const SimpleMovieScheduler = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const editSchedule = (schedule) => {
+    setEditingSchedule(schedule);
+    // Convertir la date au format YYYY-MM-DD pour l'input date
+    const scheduleDate = schedule.schedule.date;
+    const formattedDate = scheduleDate.includes('T') 
+      ? scheduleDate.split('T')[0] 
+      : scheduleDate;
+    
+    setScheduleFormData({
+      movie_id: schedule.schedule.movie_id,
+      date: formattedDate,
+      time_slot: schedule.schedule.time_slot,
+      entry_time: schedule.schedule.entry_time || '20h45',
+      start_time: schedule.schedule.start_time || '21h00',
+      capacity: schedule.schedule.capacity || 21
+    });
+    
+    // Scroller vers le formulaire
+    document.getElementById('schedule-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const deleteSchedule = async (scheduleId) => {
@@ -850,14 +888,39 @@ const SimpleMovieScheduler = () => {
               </div>
             </div>
 
-            <Button 
-              type="submit" 
-              disabled={loading || movies.length === 0}
-              className="w-full bg-orange-600 hover:bg-orange-700 flex items-center justify-center gap-2"
-            >
-              <Film className="h-4 w-4" />
-              {loading ? '⏳ Programmation...' : 'Programmer'}
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                type="submit" 
+                disabled={loading || movies.length === 0}
+                className="flex-1 bg-orange-600 hover:bg-orange-700 flex items-center justify-center gap-2"
+              >
+                <Film className="h-4 w-4" />
+                {loading 
+                  ? (editingSchedule ? '⏳ Modification...' : '⏳ Programmation...') 
+                  : (editingSchedule ? '💾 Modifier' : 'Programmer')
+                }
+              </Button>
+              {editingSchedule && (
+                <Button 
+                  type="button"
+                  onClick={() => {
+                    setEditingSchedule(null);
+                    setScheduleFormData({
+                      movie_id: '',
+                      date: '',
+                      time_slot: '21h15',
+                      entry_time: '20h45',
+                      start_time: '21h00',
+                      capacity: 21
+                    });
+                  }}
+                  variant="outline"
+                  className="px-4"
+                >
+                  Annuler
+                </Button>
+              )}
+            </div>
             
             {movies.length === 0 && (
               <p className="text-sm text-yellow-600 italic">⚠️ Ajoutez d'abord un film avant de programmer</p>
@@ -878,17 +941,32 @@ const SimpleMovieScheduler = () => {
             <div className="space-y-2">
               {schedules.map((schedule) => (
                 <div key={schedule.schedule.id} className="flex justify-between items-center p-3 bg-gray-100 rounded">
-                  <div>
+                  <div className="flex-1">
                     <strong className="text-gray-800">{schedule.movie.title}</strong> - {schedule.schedule.date} à {schedule.schedule.time_slot}
                     <br />
-                    <small className="text-gray-600">Capacité: {schedule.schedule.capacity} places</small>
+                    <small className="text-gray-600">
+                      Capacité: {schedule.schedule.capacity} places
+                      {schedule.schedule.entry_time && schedule.schedule.start_time && (
+                        <> • Entrée: {schedule.schedule.entry_time} • Début: {schedule.schedule.start_time}</>
+                      )}
+                    </small>
                   </div>
-                  <Button 
-                    onClick={() => deleteSchedule(schedule.schedule.id)}
-                    className="bg-red-600 hover:bg-red-700 text-sm"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={() => editSchedule(schedule)}
+                      className="bg-blue-600 hover:bg-blue-700 text-sm"
+                      title="Modifier"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                      onClick={() => deleteSchedule(schedule.schedule.id)}
+                      className="bg-red-600 hover:bg-red-700 text-sm"
+                      title="Supprimer"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

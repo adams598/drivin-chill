@@ -451,6 +451,14 @@ class MovieScheduleCreate(BaseModel):
     start_time: Optional[str] = None  # Heure de début du film (ex: "21h00" ou "21:00")
     capacity: int = 21  # Default capacity, can be customized
 
+class MovieScheduleUpdate(BaseModel):
+    movie_id: Optional[str] = None
+    date: Optional[date] = None
+    time_slot: Optional[TimeSlot] = None
+    entry_time: Optional[str] = None
+    start_time: Optional[str] = None
+    capacity: Optional[int] = None
+
 class MovieScheduleWithMovie(BaseModel):
     schedule: MovieSchedule
     movie: Movie

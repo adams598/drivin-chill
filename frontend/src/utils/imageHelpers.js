@@ -5,7 +5,7 @@
  */
 export const isCanvaUrl = (url) => {
   if (!url) return false;
-  return url.includes('canva.com/design/') || url.includes('canva.com/');
+  return url.includes("canva.com/design/") || url.includes("canva.com/");
 };
 
 /**
@@ -15,20 +15,31 @@ export const isCanvaUrl = (url) => {
  */
 export const isDirectImageUrl = (url) => {
   if (!url) return false;
-  
+
   // Extensions d'images communes
-  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp'];
+  const imageExtensions = [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".webp",
+    ".svg",
+    ".bmp",
+  ];
   const lowerUrl = url.toLowerCase();
-  
+
   // Vérifier si l'URL se termine par une extension d'image
-  const hasImageExtension = imageExtensions.some(ext => lowerUrl.includes(ext));
-  
+  const hasImageExtension = imageExtensions.some((ext) =>
+    lowerUrl.includes(ext)
+  );
+
   // Vérifier si c'est une data URL (base64)
-  const isDataUrl = url.startsWith('data:image/');
-  
+  const isDataUrl = url.startsWith("data:image/");
+
   // Vérifier si c'est une URL d'image hébergée (imgur, cloudinary, etc.)
-  const isImageHosting = /\.(imgur|cloudinary|unsplash|pexels|pixabay)\.com/.test(lowerUrl);
-  
+  const isImageHosting =
+    /\.(imgur|cloudinary|unsplash|pexels|pixabay)\.com/.test(lowerUrl);
+
   return hasImageExtension || isDataUrl || isImageHosting;
 };
 
@@ -38,7 +49,7 @@ export const isDirectImageUrl = (url) => {
  * @returns {string} URL nettoyée
  */
 export const cleanImageUrl = (url) => {
-  if (!url) return '';
+  if (!url) return "";
   return url.trim();
 };
 
@@ -54,14 +65,18 @@ export const convertCanvaUrlToImage = (canvaUrl) => {
 
   const proxyUrl = process.env.REACT_APP_CANVA_PROXY_URL;
   if (!proxyUrl) {
-    console.warn('REACT_APP_CANVA_PROXY_URL n\'est pas configuré. Les URLs Canva ne seront pas converties automatiquement.');
+    console.warn(
+      "REACT_APP_CANVA_PROXY_URL n'est pas configuré. Les URLs Canva ne seront pas converties automatiquement."
+    );
     return canvaUrl;
   }
 
   // Construire l'URL du proxy
   // Nettoyer l'URL du proxy (enlever les paramètres existants comme ?url=...)
-  let cleanProxyUrl = proxyUrl.split('?')[0]; // Enlever tout ce qui suit le ?
-  cleanProxyUrl = cleanProxyUrl.endsWith('/') ? cleanProxyUrl.slice(0, -1) : cleanProxyUrl;
+  let cleanProxyUrl = proxyUrl.split("?")[0]; // Enlever tout ce qui suit le ?
+  cleanProxyUrl = cleanProxyUrl.endsWith("/")
+    ? cleanProxyUrl.slice(0, -1)
+    : cleanProxyUrl;
   return `${cleanProxyUrl}/?url=${encodeURIComponent(canvaUrl)}`;
 };
 
@@ -72,7 +87,7 @@ export const convertCanvaUrlToImage = (canvaUrl) => {
  */
 export const extractCanvaDesignId = (url) => {
   if (!isCanvaUrl(url)) return null;
-  
+
   // Format: canva.com/design/DAG6HlIb8R4/...
   const match = url.match(/canva\.com\/design\/([A-Za-z0-9]+)/);
   return match ? match[1] : null;
@@ -85,60 +100,66 @@ export const extractCanvaDesignId = (url) => {
  */
 export const getImageUrlHelpMessage = (url) => {
   if (!url) return null;
-  
+
   const cleanedUrl = cleanImageUrl(url);
-  
+
   if (isCanvaUrl(cleanedUrl)) {
     const proxyUrl = process.env.REACT_APP_CANVA_PROXY_URL;
-    
-    if (proxyUrl) {
-      return {
-        type: 'info',
-        message: '✅ URL Canva détectée - Conversion automatique activée !',
-        explanation: 'Votre URL Canva sera automatiquement convertie en image via le proxy Cloudflare Worker.',
-        note: 'L\'image s\'affichera automatiquement. Aucune action requise de votre part !'
-      };
-    }
-    
+
+    // if (proxyUrl) {
+    //   return {
+    //     type: "info",
+    //     message: "✅ URL Canva détectée - Conversion automatique activée !",
+    //     explanation:
+    //       "Votre URL Canva sera automatiquement convertie en image via le proxy Cloudflare Worker.",
+    //     note: "L'image s'affichera automatiquement. Aucune action requise de votre part !",
+    //   };
+    // }
+
     return {
-      type: 'error',
-      message: '❌ Cette URL Canva ne peut PAS être utilisée directement comme image.',
-      explanation: 'Les URLs Canva pointent vers une page web, pas vers une image. Le navigateur ne peut pas afficher une page web comme une image.',
+      type: "error",
+      message:
+        "❌ Cette URL Canva ne peut PAS être utilisée directement comme image.",
+      explanation:
+        "Les URLs Canva pointent vers une page web, pas vers une image. Le navigateur ne peut pas afficher une page web comme une image.",
       quickSolution: {
-        title: '🚀 Solution rapide (2 minutes) :',
+        title: "🚀 Solution rapide (2 minutes) :",
         steps: [
           {
-            step: '1. Ouvrez votre design Canva',
-            detail: 'Cliquez sur le lien que vous avez collé'
+            step: "1. Ouvrez votre design Canva",
+            detail: "Cliquez sur le lien que vous avez collé",
           },
           {
-            step: '2. Téléchargez l\'image',
-            detail: 'Cliquez sur "Partager" → "Télécharger" → Choisissez JPG ou PNG'
+            step: "2. Téléchargez l'image",
+            detail:
+              'Cliquez sur "Partager" → "Télécharger" → Choisissez JPG ou PNG',
           },
           {
-            step: '3. Uploadez sur Imgur',
-            detail: 'Allez sur imgur.com → "New post" → Glissez votre image → Copiez l\'URL directe'
+            step: "3. Uploadez sur Imgur",
+            detail:
+              'Allez sur imgur.com → "New post" → Glissez votre image → Copiez l\'URL directe',
           },
           {
-            step: '4. Collez la nouvelle URL',
-            detail: 'L\'URL Imgur se termine par .jpg ou .png et fonctionnera parfaitement !'
-          }
-        ]
+            step: "4. Collez la nouvelle URL",
+            detail:
+              "L'URL Imgur se termine par .jpg ou .png et fonctionnera parfaitement !",
+          },
+        ],
       },
       alternatives: [
-        '💡 Alternative : Configurez un Cloudflare Worker pour conversion automatique (voir README)'
-      ]
+        "💡 Alternative : Configurez un Cloudflare Worker pour conversion automatique (voir README)",
+      ],
     };
   }
-  
-  if (!isDirectImageUrl(cleanedUrl) && cleanedUrl.startsWith('http')) {
+
+  if (!isDirectImageUrl(cleanedUrl) && cleanedUrl.startsWith("http")) {
     return {
-      type: 'warning',
-      message: '⚠️ Cette URL ne semble pas être une URL d\'image directe.',
-      explanation: 'Les URLs d\'images directes se terminent généralement par .jpg, .png, .gif, .webp, etc.'
+      type: "warning",
+      message: "⚠️ Cette URL ne semble pas être une URL d'image directe.",
+      explanation:
+        "Les URLs d'images directes se terminent généralement par .jpg, .png, .gif, .webp, etc.",
     };
   }
-  
+
   return null;
 };
-
