@@ -792,8 +792,14 @@ const SimpleMovieScheduler = () => {
                 value={scheduleFormData.entry_time || ''}
                 onChange={(e) => {
                   const value = e.target.value;
-                  // Permettre les formats 20h45 ou 20:45
-                  if (/^([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]$/.test(value) || value === '') {
+                  // Permettre la saisie progressive : chiffres, puis h ou :, puis chiffres
+                  // Accepter : vide, chiffres seuls, chiffres+h/chiffres:, chiffres+h/chiffres:chiffres
+                  if (value === '' || 
+                      /^[0-2]?$/.test(value) || 
+                      /^([0-1]?[0-9]|2[0-3])$/.test(value) ||
+                      /^([0-1]?[0-9]|2[0-3])[h:]$/.test(value) ||
+                      /^([0-1]?[0-9]|2[0-3])[h:][0-5]?$/.test(value) ||
+                      /^([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]$/.test(value)) {
                     setScheduleFormData({...scheduleFormData, entry_time: value});
                   }
                 }}
@@ -816,8 +822,14 @@ const SimpleMovieScheduler = () => {
                 value={scheduleFormData.start_time || ''}
                 onChange={(e) => {
                   const value = e.target.value;
-                  // Permettre les formats 21h00 ou 21:00
-                  if (/^([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]$/.test(value) || value === '') {
+                  // Permettre la saisie progressive : chiffres, puis h ou :, puis chiffres
+                  // Accepter : vide, chiffres seuls, chiffres+h/chiffres:, chiffres+h/chiffres:chiffres
+                  if (value === '' || 
+                      /^[0-2]?$/.test(value) || 
+                      /^([0-1]?[0-9]|2[0-3])$/.test(value) ||
+                      /^([0-1]?[0-9]|2[0-3])[h:]$/.test(value) ||
+                      /^([0-1]?[0-9]|2[0-3])[h:][0-5]?$/.test(value) ||
+                      /^([0-1]?[0-9]|2[0-3])[h:][0-5][0-9]$/.test(value)) {
                     setScheduleFormData({...scheduleFormData, start_time: value});
                   }
                 }}
