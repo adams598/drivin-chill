@@ -790,7 +790,7 @@ conf = None
 email_enabled = False
 
 # Check if email credentials are provided
-email_username = os.environ.get('EMAIL_USERNAME')
+email_username = os.environ.get('EMAIL_FROM')
 email_password = os.environ.get('EMAIL_PASSWORD')
 email_host = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
 email_port = int(os.environ.get('EMAIL_PORT', '587'))
@@ -815,12 +815,20 @@ else:
 # Enhanced email sending with retry mechanism
 async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retries: int = 3):
     """Send confirmation email with QR code - with retry mechanism"""
+    logging.info(f"📧 send_confirmation_email appelé pour {booking.email}")
+    logging.info(f"📧 email_enabled = {email_enabled}")
+    
     if not email_enabled:
         # Simulate email for demo/development
         logging.info(f"📧 [SIMULATION] Email envoyé à {booking.email}")
-        logging.info(f"Sujet: Confirmation de votre réservation - Drivin And Chill")
-        logging.info(f"QR Code inclus pour la réservation {booking.id}")
+        logging.info(f"📧 Sujet: Confirmation de votre réservation - Drivin And Chill")
+        logging.info(f"📧 QR Code inclus pour la réservation {booking.id}")
+        logging.warning(f"⚠️ EMAIL EN MODE SIMULATION - Configurez EMAIL_USERNAME et EMAIL_PASSWORD dans .env pour activer l'envoi réel")
         return True
+    
+    if not conf:
+        logging.error(f"❌ Configuration email non initialisée (conf is None)")
+        return False
     
     # Create email template
     email_template = f"""
@@ -886,8 +894,10 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
     """
     
     # Try sending email with retry mechanism
+    logging.info(f"📧 Début de l'envoi d'email à {booking.email} (max {max_retries} tentatives)")
     for attempt in range(max_retries):
         try:
+            logging.info(f"📧 Tentative {attempt + 1}/{max_retries} d'envoi d'email à {booking.email}")
             message = MessageSchema(
                 subject="🎬 Confirmation de votre réservation - Drivin And Chill",
                 recipients=[booking.email],
@@ -895,19 +905,35 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
                 subtype=MessageType.html
             )
             
+            logging.info(f"📧 Création de FastMail avec config: {email_host}:{email_port}, username: {email_username[:3]}***")
             fm = FastMail(conf)
+            logging.info(f"📧 Appel de fm.send_message...")
             await fm.send_message(message)
             
             logging.info(f"✅ Email envoyé avec succès à {booking.email} (tentative {attempt + 1})")
             return True
             
         except Exception as e:
-            logging.error(f"❌ Échec envoi email à {booking.email} (tentative {attempt + 1}/{max_retries}): {str(e)}")
+            error_msg = str(e)
+            logging.error(f"❌ Échec envoi email à {booking.email} (tentative {attempt + 1}/{max_retries})")
+            logging.error(f"❌ Erreur détaillée: {error_msg}", exc_info=True)
+            
+            # Log more details about the error
+            if "535" in error_msg or "authentication" in error_msg.lower() or "invalid" in error_msg.lower():
+                logging.error(f"❌ Erreur d'authentification SMTP - Vérifiez EMAIL_USERNAME et EMAIL_PASSWORD")
+                logging.error(f"❌ Le mot de passe d'application Gmail doit être utilisé, pas le mot de passe principal")
+            elif "connection" in error_msg.lower() or "timeout" in error_msg.lower() or "network" in error_msg.lower():
+                logging.error(f"❌ Erreur de connexion SMTP - Vérifiez EMAIL_HOST ({email_host}) et EMAIL_PORT ({email_port})")
+            elif "550" in error_msg or "recipient" in error_msg.lower():
+                logging.error(f"❌ Erreur de destinataire - Vérifiez l'adresse email: {booking.email}")
+            
             if attempt < max_retries - 1:
                 # Wait before retry (exponential backoff)
-                await asyncio.sleep(2 ** attempt)
+                wait_time = 2 ** attempt
+                logging.info(f"⏳ Attente de {wait_time} secondes avant nouvelle tentative...")
+                await asyncio.sleep(wait_time)
             else:
-                logging.error(f"❌ Abandon envoi email après {max_retries} tentatives")
+                logging.error(f"❌ Abandon envoi email après {max_retries} tentatives - Dernière erreur: {error_msg}")
                 # Don't raise exception - booking should still succeed even if email fails
                 return False
     
@@ -1168,11 +1194,17 @@ async def create_booking(booking_data: TicketBookingCreate):
         result = await db.bookings.insert_one(booking_mongo)
         
         # Send confirmation email asynchronously
+        logging.info(f"📧 Tentative d'envoi d'email pour la réservation {booking_obj.id} à {booking_obj.email}")
+        logging.info(f"📧 Email enabled: {email_enabled}")
         try:
-            await send_confirmation_email(booking_obj, qr_code)
+            email_result = await send_confirmation_email(booking_obj, qr_code)
+            if email_result:
+                logging.info(f"✅ Email envoyé avec succès pour la réservation {booking_obj.id}")
+            else:
+                logging.warning(f"⚠️ Échec de l'envoi d'email pour la réservation {booking_obj.id} (mais réservation créée)")
         except Exception as e:
             # Don't fail the booking if email fails, just log it
-            logging.error(f"Email envoi échoué pour {booking_obj.id}: {str(e)}")
+            logging.error(f"❌ Exception lors de l'envoi d'email pour {booking_obj.id}: {str(e)}", exc_info=True)
         
         return booking_obj
         
@@ -1383,6 +1415,7 @@ async def create_payment_checkout(request: PaymentRequest):
             await db.payment_transactions.insert_one(transaction_mongo)
             
             # Send confirmation email for free booking
+            logging.info(f"📧 Tentative d'envoi d'email pour réservation gratuite {request.booking_id}")
             try:
                 # Get the full booking details
                 updated_booking = await db.bookings.find_one({"id": request.booking_id})
@@ -1391,11 +1424,16 @@ async def create_payment_checkout(request: PaymentRequest):
                     # Generate QR code for the booking
                     qr_code = generate_qr_code(booking_obj.dict())
                     # Send confirmation email
-                    await send_confirmation_email(booking_obj, qr_code)
-                    logging.info(f"📧 Email de confirmation envoyé pour réservation gratuite: {booking_obj.email}")
+                    email_result = await send_confirmation_email(booking_obj, qr_code)
+                    if email_result:
+                        logging.info(f"📧 Email de confirmation envoyé pour réservation gratuite: {booking_obj.email}")
+                    else:
+                        logging.warning(f"⚠️ Échec envoi email pour réservation gratuite: {booking_obj.email}")
+                else:
+                    logging.error(f"❌ Réservation {request.booking_id} non trouvée pour envoi d'email")
             except Exception as e:
                 # Don't fail the booking if email fails, just log it
-                logging.error(f"❌ Erreur envoi email réservation gratuite {request.booking_id}: {str(e)}")
+                logging.error(f"❌ Erreur envoi email réservation gratuite {request.booking_id}: {str(e)}", exc_info=True)
             
             # Return success URL for free booking
             return {
@@ -1608,15 +1646,21 @@ async def stripe_webhook(request: Request):
                 )
                 
                 # Send confirmation email
+                logging.info(f"📧 Tentative d'envoi d'email via webhook pour réservation {booking_id}")
                 try:
                     booking = await db.bookings.find_one({"id": booking_id})
                     if booking:
                         booking_obj = TicketBooking(**parse_from_mongo(booking))
                         qr_code = generate_qr_code(booking_obj.dict())
-                        await send_confirmation_email(booking_obj, qr_code)
-                        logging.info(f"📧 Email de confirmation envoyé via webhook: {booking_obj.email}")
+                        email_result = await send_confirmation_email(booking_obj, qr_code)
+                        if email_result:
+                            logging.info(f"📧 Email de confirmation envoyé via webhook: {booking_obj.email}")
+                        else:
+                            logging.warning(f"⚠️ Échec envoi email via webhook: {booking_obj.email}")
+                    else:
+                        logging.error(f"❌ Réservation {booking_id} non trouvée pour envoi d'email via webhook")
                 except Exception as e:
-                    logging.error(f"❌ Erreur envoi email via webhook {booking_id}: {str(e)}")
+                    logging.error(f"❌ Erreur envoi email via webhook {booking_id}: {str(e)}", exc_info=True)
         
         return {"status": "success"}
         
