@@ -107,6 +107,24 @@ except Exception as e:
 # Create the main app without a prefix
 app = FastAPI()
 
+# CORS configuration - MUST be added BEFORE routes
+cors_origins = os.environ.get('CORS_ORIGINS', '*')
+if cors_origins == '*':
+    allowed_origins = ['*']
+    logging.info("🌐 CORS configuré pour autoriser toutes les origines (*)")
+else:
+    allowed_origins = [origin.strip() for origin in cors_origins.split(',') if origin.strip()]
+    logging.info(f"🌐 CORS configuré pour les origines: {allowed_origins}")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=allowed_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
+
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
@@ -961,9 +979,9 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
         # Normaliser le format (20h45 -> 20:45 ou garder tel quel)
         return time_str.replace("h", ":") if "h" in time_str else time_str
     
-    entry_time_formatted = format_time(entry_time) if entry_time else "À confirmer"
-    start_time_formatted = format_time(start_time) if start_time else "À confirmer"
-    end_time_formatted = format_time(end_time) if end_time else "À confirmer"
+    entry_time_formatted = format_time(entry_time) if entry_time else " "
+    start_time_formatted = format_time(start_time) if start_time else " "
+    end_time_formatted = format_time(end_time) if end_time else " "
     
     # Construire la section code promo
     promo_section = ""
@@ -3605,21 +3623,6 @@ async def get_all_admin_bookings(admin = Depends(get_admin_user)):
         return [TicketBooking(**parse_from_mongo(booking)) for booking in bookings]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des réservations: {str(e)}")
-
-# CORS configuration - MUST be added BEFORE routes
-cors_origins = os.environ.get('CORS_ORIGINS', '*')
-if cors_origins == '*':
-    allowed_origins = ['*']
-else:
-    allowed_origins = [origin.strip() for origin in cors_origins.split(',') if origin.strip()]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=allowed_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # Include the router in the main app
 app.include_router(api_router)
