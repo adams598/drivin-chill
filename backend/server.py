@@ -19,6 +19,10 @@ import stripe
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from jinja2 import Template
 import asyncio
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
+import aiosmtplib
 
 ROOT_DIR = Path(__file__).parent
 env_path = ROOT_DIR / '.env'
@@ -1033,8 +1037,11 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
         logging.error(f"❌ Configuration email non initialisée (conf is None)")
         return False
     
-    # QR code is already generated and passed as qr_code parameter (data URI format)
-    # This format works in most email clients and is the most reliable method
+    # Generate QR code as bytes for inline attachment
+    # We'll use inline attachment with Content-ID for better email client compatibility
+    qr_code_bytes = generate_qr_code_image_bytes(booking.dict())
+    qr_cid = f"qrcode_{booking.id}"
+    logging.info(f"📧 QR Code généré pour pièce jointe inline (CID: {qr_cid})")
     
     # Create email template
     email_template = f"""
@@ -1084,8 +1091,10 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
                 <div class="qr-code">
                     <h3>🎫 Votre billet d'entrée</h3>
                     <p>Présentez ce QR code à l'entrée :</p>
-                    <!-- Utilisation de la data URI pour garantir l'affichage dans tous les clients email -->
-                    <img src="{qr_code}" alt="QR Code de réservation" style="max-width: 200px; height: auto; display: block; margin: 15px auto; border: 2px solid #667eea; border-radius: 8px; padding: 10px; background-color: white;">
+                    <!-- Utilisation de Content-ID pour pièce jointe inline -->
+                    <img src="cid:{qr_cid}" alt="QR Code de réservation" style="max-width: 200px; height: auto; display: block; margin: 15px auto; border: 2px solid #667eea; border-radius: 8px; padding: 10px; background-color: white;">
+                    <!-- Fallback avec data URI si le client email ne supporte pas les pièces jointes inline -->
+                    <img src="{qr_code}" alt="QR Code Fallback" style="max-width: 200px; height: auto; display: none;">
                     <p style="text-align: center; font-size: 12px; color: #666; margin-top: 10px;">Si l'image ne s'affiche pas, vérifiez que votre client email autorise l'affichage des images.</p>
                 </div>
                 
@@ -1115,20 +1124,43 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
         try:
             logging.info(f"📧 Tentative {attempt + 1}/{max_retries} d'envoi d'email à {booking.email}")
             
-            # Create message - using data URI in HTML for QR code (most compatible)
-            # We removed inline attachment to avoid email sending errors
-            # The data URI method works in most email clients
-            message = MessageSchema(
-                subject="🎬 Confirmation de votre réservation - Drivin And Chill",
-                recipients=[booking.email],
-                body=email_template,
-                subtype=MessageType.html
-            )
-            
-            logging.info(f"📧 Création de FastMail avec config: {email_host}:{email_port}, username: {email_username[:3]}***")
-            fm = FastMail(conf)
-            logging.info(f"📧 Appel de fm.send_message...")
-            await fm.send_message(message)
+            try:
+                # Create multipart message with inline QR code attachment
+                # Using email.mime for proper Content-ID support
+                msg = MIMEMultipart('related')
+                msg['Subject'] = "🎬 Confirmation de votre réservation - Drivin And Chill"
+                msg['From'] = email_username
+                msg['To'] = booking.email
+                
+                # Create the HTML part
+                html_part = MIMEText(email_template, 'html', 'utf-8')
+                msg.attach(html_part)
+                
+                # Attach QR code as inline image with Content-ID
+                qr_image = MIMEImage(qr_code_bytes)
+                qr_image.add_header('Content-ID', f'<{qr_cid}>')
+                qr_image.add_header('Content-Disposition', 'inline', filename=f'qrcode_{booking.id}.png')
+                msg.attach(qr_image)
+                
+                logging.info(f"📧 Message multipart créé avec QR code inline (Content-ID: <{qr_cid}>)")
+                
+                # Send email using aiosmtplib for better control
+                logging.info(f"📧 Envoi via SMTP direct: {email_host}:{email_port}")
+                async with aiosmtplib.SMTP(hostname=email_host, port=email_port, start_tls=True) as smtp:
+                    await smtp.login(email_username, email_password)
+                    await smtp.send_message(msg)
+                    
+            except ImportError:
+                # Fallback to fastapi-mail if aiosmtplib is not available
+                logging.warning("⚠️ aiosmtplib non disponible, utilisation de fastapi-mail avec data URI")
+                message = MessageSchema(
+                    subject="🎬 Confirmation de votre réservation - Drivin And Chill",
+                    recipients=[booking.email],
+                    body=email_template,
+                    subtype=MessageType.html
+                )
+                fm = FastMail(conf)
+                await fm.send_message(message)
             
             logging.info(f"✅ Email envoyé avec succès à {booking.email} (tentative {attempt + 1})")
             return True
