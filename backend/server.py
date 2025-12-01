@@ -16,7 +16,7 @@ import qrcode
 import io
 import base64
 import stripe
-from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType, Attachment
+from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from jinja2 import Template
 import asyncio
 
@@ -106,24 +106,6 @@ except Exception as e:
 
 # Create the main app without a prefix
 app = FastAPI()
-
-# CORS configuration - MUST be added BEFORE routes
-cors_origins = os.environ.get('CORS_ORIGINS', '*')
-if cors_origins == '*':
-    allowed_origins = ['*']
-    logging.info("🌐 CORS configuré pour autoriser toutes les origines (*)")
-else:
-    allowed_origins = [origin.strip() for origin in cors_origins.split(',') if origin.strip()]
-    logging.info(f"🌐 CORS configuré pour les origines: {allowed_origins}")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=allowed_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -781,7 +763,7 @@ async def migrate_legacy_time_slots():
                 )
 
 def generate_qr_code(booking_data: dict) -> str:
-    """Generate QR code for booking - returns base64 data URI (legacy)"""
+    """Generate QR code for booking"""
     qr_data = f"DRIVIN_AND_CHILL\nRéservation: {booking_data['id']}\n{booking_data['first_name']} {booking_data['last_name']}\nDate: {booking_data['booking_date']}\nCréneau: {booking_data['time_slot']}\nPrix: {booking_data['price']}€"
     
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
@@ -795,22 +777,6 @@ def generate_qr_code(booking_data: dict) -> str:
     img.save(buffer, format='PNG')
     img_str = base64.b64encode(buffer.getvalue()).decode()
     return f"data:image/png;base64,{img_str}"
-
-def generate_qr_code_bytes(booking_data: dict) -> bytes:
-    """Generate QR code for booking - returns bytes for email attachment"""
-    qr_data = f"DRIVIN_AND_CHILL\nRéservation: {booking_data['id']}\n{booking_data['first_name']} {booking_data['last_name']}\nDate: {booking_data['booking_date']}\nCréneau: {booking_data['time_slot']}\nPrix: {booking_data['price']}€"
-    
-    qr = qrcode.QRCode(version=1, box_size=10, border=5)
-    qr.add_data(qr_data)
-    qr.make(fit=True)
-    
-    img = qr.make_image(fill_color="black", back_color="white")
-    
-    # Convert to bytes
-    buffer = io.BytesIO()
-    img.save(buffer, format='PNG')
-    buffer.seek(0)
-    return buffer.getvalue()
 
 # Initialize Stripe
 stripe_api_key = os.environ.get('STRIPE_SECRET_KEY') or os.environ.get('STRIPE_API_KEY')
@@ -851,7 +817,6 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
     """Send confirmation email with QR code - with retry mechanism"""
     logging.info(f"📧 send_confirmation_email appelé pour {booking.email}")
     logging.info(f"📧 email_enabled = {email_enabled}")
-    logging.info(f"📧 QR code présent: {qr_code[:50] if qr_code else 'AUCUN'}...")
     
     # Récupérer les informations du film et du schedule
     movie_title = "Film à confirmer"
@@ -889,54 +854,6 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
             movie = await db.movies.find_one({"id": schedule.get("movie_id")})
             if movie:
                 movie_title = movie.get("title", "Film à confirmer")
-        
-        # Si les horaires ne sont pas dans le schedule, les récupérer depuis TimeSlotSettings
-        if not entry_time or not start_time or not end_time:
-            try:
-                time_settings = await get_time_slot_settings()
-                time_slot_str = str(booking.time_slot).lower()
-                
-                # Déterminer quel créneau utiliser en comparant avec les valeurs configurées
-                first_slot_match = (time_slot_str == time_settings.first_slot_value.lower() or 
-                                   time_slot_str in time_settings.first_slot_value.lower() or
-                                   time_settings.first_slot_value.lower() in time_slot_str)
-                second_slot_match = (time_slot_str == time_settings.second_slot_value.lower() or 
-                                    time_slot_str in time_settings.second_slot_value.lower() or
-                                    time_settings.second_slot_value.lower() in time_slot_str)
-                third_slot_match = (time_slot_str == time_settings.third_slot_value.lower() or 
-                                   time_slot_str in time_settings.third_slot_value.lower() or
-                                   time_settings.third_slot_value.lower() in time_slot_str)
-                
-                if first_slot_match:
-                    entry_time = entry_time or time_settings.first_slot_entry_time
-                    start_time = start_time or time_settings.first_slot_start_time
-                    end_time = end_time or time_settings.first_slot_end_time
-                elif second_slot_match:
-                    entry_time = entry_time or time_settings.second_slot_entry_time
-                    start_time = start_time or time_settings.second_slot_start_time
-                    end_time = end_time or time_settings.second_slot_end_time
-                elif third_slot_match:
-                    entry_time = entry_time or time_settings.third_slot_entry_time
-                    start_time = start_time or time_settings.third_slot_start_time
-                    end_time = end_time or time_settings.third_slot_end_time
-                else:
-                    # Fallback: essayer de déterminer depuis le time_slot
-                    if "19h" in time_slot_str or "18h" in time_slot_str:
-                        entry_time = entry_time or time_settings.first_slot_entry_time
-                        start_time = start_time or time_settings.first_slot_start_time
-                        end_time = end_time or time_settings.first_slot_end_time
-                    elif "21h" in time_slot_str:
-                        entry_time = entry_time or time_settings.second_slot_entry_time
-                        start_time = start_time or time_settings.second_slot_start_time
-                        end_time = end_time or time_settings.second_slot_end_time
-                    elif "23h" in time_slot_str or "01h" in time_slot_str or "1h" in time_slot_str:
-                        entry_time = entry_time or time_settings.third_slot_entry_time
-                        start_time = start_time or time_settings.third_slot_start_time
-                        end_time = end_time or time_settings.third_slot_end_time
-                    
-                logging.info(f"📧 Horaires récupérés depuis TimeSlotSettings: entry={entry_time}, start={start_time}, end={end_time}")
-            except Exception as e:
-                logging.warning(f"⚠️ Erreur lors de la récupération des TimeSlotSettings: {str(e)}")
         
         # Récupérer les informations du code promo si applicable
         if booking_promo_code:
@@ -979,9 +896,9 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
         # Normaliser le format (20h45 -> 20:45 ou garder tel quel)
         return time_str.replace("h", ":") if "h" in time_str else time_str
     
-    entry_time_formatted = format_time(entry_time) if entry_time else " "
-    start_time_formatted = format_time(start_time) if start_time else " "
-    end_time_formatted = format_time(end_time) if end_time else " "
+    entry_time_formatted = format_time(entry_time) if entry_time else "À confirmer"
+    start_time_formatted = format_time(start_time) if start_time else "À confirmer"
+    end_time_formatted = format_time(end_time) if end_time else "À confirmer"
     
     # Construire la section code promo
     promo_section = ""
@@ -1068,7 +985,7 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
                 <div class="qr-code">
                     <h3>🎫 Votre billet d'entrée</h3>
                     <p>Présentez ce QR code à l'entrée :</p>
-                    <img src="cid:qr_code_{booking.id}" alt="QR CODE" style="max-width: 200px; height: auto; display: block; margin: 10px auto; border: 2px solid #ddd; padding: 10px; background-color: white;">
+                    <img src="{qr_code}" alt="QR Code" style="max-width: 200px;">
                 </div>
                 
                 <h3>ℹ️ Informations importantes</h3>
@@ -1091,35 +1008,21 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
     </html>
     """
     
-    # Generate QR code as bytes for attachment
-    qr_code_bytes = generate_qr_code_bytes(booking.dict())
-    qr_cid = f"qr_code_{booking.id}"
-    
     # Try sending email with retry mechanism
     logging.info(f"📧 Début de l'envoi d'email à {booking.email} (max {max_retries} tentatives)")
     for attempt in range(max_retries):
         try:
             logging.info(f"📧 Tentative {attempt + 1}/{max_retries} d'envoi d'email à {booking.email}")
-            
-            # Create attachment for QR code with CID
-            qr_attachment = Attachment(
-                filename=f"qr_code_{booking.id}.png",
-                file=qr_code_bytes,
-                content_id=qr_cid,
-                disposition="inline"
-            )
-            
             message = MessageSchema(
                 subject="🎬 Confirmation de votre réservation - Drivin And Chill",
                 recipients=[booking.email],
                 body=email_template,
-                subtype=MessageType.html,
-                attachments=[qr_attachment]
+                subtype=MessageType.html
             )
             
             logging.info(f"📧 Création de FastMail avec config: {email_host}:{email_port}, username: {email_username[:3]}***")
             fm = FastMail(conf)
-            logging.info(f"📧 Appel de fm.send_message avec QR code en pièce jointe (CID: {qr_cid})...")
+            logging.info(f"📧 Appel de fm.send_message...")
             await fm.send_message(message)
             
             logging.info(f"✅ Email envoyé avec succès à {booking.email} (tentative {attempt + 1})")
@@ -3623,6 +3526,21 @@ async def get_all_admin_bookings(admin = Depends(get_admin_user)):
         return [TicketBooking(**parse_from_mongo(booking)) for booking in bookings]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des réservations: {str(e)}")
+
+# CORS configuration - MUST be added BEFORE routes
+cors_origins = os.environ.get('CORS_ORIGINS', '*')
+if cors_origins == '*':
+    allowed_origins = ['*']
+else:
+    allowed_origins = [origin.strip() for origin in cors_origins.split(',') if origin.strip()]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=allowed_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Include the router in the main app
 app.include_router(api_router)
