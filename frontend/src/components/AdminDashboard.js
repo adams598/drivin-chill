@@ -97,18 +97,23 @@ const AdminDashboard = ({ onLogout }) => {
 
   const updateBooking = async (bookingId, updateData) => {
     try {
-      await axios.put(`${API}/bookings/${bookingId}`, updateData, { headers: authHeaders });
+      const response = await axios.put(`${API}/bookings/${bookingId}`, updateData, { headers: authHeaders });
       toast.success('Réservation mise à jour avec succès');
-      fetchBookings();
+      // Refresh bookings list to get updated data
+      await fetchBookings();
       setEditingBooking(null);
     } catch (error) {
-      toast.error('Erreur lors de la mise à jour');
+      console.error('Update booking error:', error);
+      const errorMessage = error.response?.data?.detail || error.message || 'Erreur lors de la mise à jour';
+      toast.error(`Erreur: ${errorMessage}`);
     }
   };
 
   const getStatusBadge = (status, paymentStatus) => {
-    if (paymentStatus === 'paid') return <Badge className="bg-green-600">Payé</Badge>;
     if (status === 'cancelled') return <Badge variant="destructive">Annulé</Badge>;
+    if (paymentStatus === 'paid') return <Badge className="bg-green-600">Payé</Badge>;
+    if (status === 'confirmed') return <Badge className="bg-blue-600">Confirmé</Badge>;
+    if (status === 'paid') return <Badge className="bg-green-600">Payé</Badge>;
     return <Badge variant="secondary">En attente</Badge>;
   };
 

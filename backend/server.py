@@ -663,6 +663,14 @@ def prepare_for_mongo(data):
         data['date'] = data['date'].isoformat()
     if isinstance(data.get('time_slot'), Enum):
         data['time_slot'] = data['time_slot'].value
+    if isinstance(data.get('status'), Enum):
+        data['status'] = data['status'].value
+    if isinstance(data.get('payment_status'), Enum):
+        data['payment_status'] = data['payment_status'].value
+    if isinstance(data.get('payment_method'), Enum):
+        data['payment_method'] = data['payment_method'].value
+    if isinstance(data.get('day_of_week'), Enum):
+        data['day_of_week'] = data['day_of_week'].value
     if isinstance(data.get('created_at'), datetime):
         data['created_at'] = data['created_at'].isoformat()
     if isinstance(data.get('updated_at'), datetime):
