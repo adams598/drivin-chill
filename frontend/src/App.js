@@ -173,6 +173,8 @@ function App() {
     phone: "",
     paymentMethod: "",
     promoCode: "",
+    nbPersonne: "",
+    nbPersonneCustom: "",
   });
   const [promoCodeInfo, setPromoCodeInfo] = useState({
     valid: false,
@@ -819,10 +821,20 @@ function App() {
       !formData.firstName ||
       !formData.lastName ||
       !formData.email ||
-      !formData.paymentMethod
+      !formData.paymentMethod ||
+      !formData.nbPersonne
     ) {
       toast.error("Veuillez remplir tous les champs obligatoires");
       return;
+    }
+
+    // Validation du nombre de personnes si "Plus de 5" est sélectionné
+    if (formData.nbPersonne === "more") {
+      const customNb = parseInt(formData.nbPersonneCustom);
+      if (!formData.nbPersonneCustom || isNaN(customNb) || customNb < 6) {
+        toast.error("Veuillez indiquer un nombre de personnes valide (minimum 6)");
+        return;
+      }
     }
 
     // Validation de l'email
@@ -835,6 +847,11 @@ function App() {
     setIsSubmitting(true);
 
     try {
+      // Calculate number of people
+      const nbPersonne = formData.nbPersonne === "more" 
+        ? parseInt(formData.nbPersonneCustom) 
+        : parseInt(formData.nbPersonne);
+
       // First create the booking
       const bookingData = {
         first_name: formData.firstName.trim(),
@@ -852,6 +869,7 @@ function App() {
           promoCodeInfo.valid && promoCodeInfo.final_price !== undefined
             ? promoCodeInfo.final_price
             : getBasePrice(),
+        nb_personne: nbPersonne,
         // Add content type and ID for backend to distinguish events from movies
         content_type:
           (preFillData && preFillData.isEvent) ||
@@ -2546,6 +2564,55 @@ function App() {
                   placeholder="06 12 34 56 78"
                   className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
                 />
+              </div>
+
+              {/* Nombre de personnes */}
+              <div className="space-y-2">
+                <Label className="text-white">Nombre de personnes *</Label>
+                <Select
+                  value={formData.nbPersonne}
+                  onValueChange={(value) => {
+                    handleInputChange("nbPersonne", value);
+                    if (value !== "more") {
+                      handleInputChange("nbPersonneCustom", "");
+                    }
+                  }}
+                >
+                  <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                    <SelectValue placeholder="Sélectionnez le nombre de personnes" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-800 border-gray-600">
+                    {[1, 2, 3, 4, 5].map((num) => (
+                      <SelectItem
+                        key={num}
+                        value={num.toString()}
+                        className="text-white hover:bg-gray-700"
+                      >
+                        {num} {num === 1 ? "personne" : "personnes"}
+                      </SelectItem>
+                    ))}
+                    <SelectItem
+                      value="more"
+                      className="text-white hover:bg-gray-700"
+                    >
+                      Plus de 5 personnes
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                {formData.nbPersonne === "more" && (
+                  <div className="mt-2">
+                    <Input
+                      type="number"
+                      min="6"
+                      value={formData.nbPersonneCustom}
+                      onChange={(e) =>
+                        handleInputChange("nbPersonneCustom", e.target.value)
+                      }
+                      placeholder="Indiquez le nombre de personnes"
+                      className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Promo Code */}

@@ -131,3 +131,4 @@ Après chaque réservation, vérifiez les logs pour :
 **Besoin d'aide ?** Consultez `EMAIL_CONFIGURATION.md` pour le guide complet de configuration.
 
 
+

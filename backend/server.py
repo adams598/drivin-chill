@@ -516,6 +516,7 @@ class TicketBooking(BaseModel):
     checked_in_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_cancelled: bool = False
+    nb_personne: int = 1
 
 class TicketBookingCreate(BaseModel):
     first_name: str
@@ -528,6 +529,7 @@ class TicketBookingCreate(BaseModel):
     payment_method: PaymentMethod
     promo_code: Optional[str] = None
     final_price: Optional[float] = None  # Price after promo code discount
+    nb_personne: int = 1
     # New fields for event booking flexibility
     content_type: Optional[str] = None  # 'movie' or 'event'
     content_id: Optional[str] = None
@@ -682,6 +684,9 @@ def parse_from_mongo(item):
         item['created_at'] = datetime.fromisoformat(item['created_at'])
     if isinstance(item.get('updated_at'), str):
         item['updated_at'] = datetime.fromisoformat(item['updated_at'])
+    # Ensure nb_personne exists for backward compatibility with old bookings
+    if 'nb_personne' not in item:
+        item['nb_personne'] = 1
     return item
 
 
