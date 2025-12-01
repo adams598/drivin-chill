@@ -104,46 +104,48 @@ const QRScanner = () => {
     stopCamera();
   };
 
-  const requestCameraPermission = async () => {
-    try {
-      // Demander explicitement les permissions de caméra
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "environment" } 
-      });
-      // Libérer immédiatement le stream, on le redemandera dans Html5Qrcode
-      stream.getTracks().forEach(track => track.stop());
-      return true;
-    } catch (err) {
-      console.warn('Permission caméra refusée ou erreur:', err);
-      return false;
-    }
-  };
-
   const startCamera = async () => {
     try {
       setCameraError(null);
       
+      // Nettoyer toute instance précédente
+      if (html5QrCodeRef.current) {
+        try {
+          await html5QrCodeRef.current.stop();
+          await html5QrCodeRef.current.clear();
+        } catch (cleanError) {
+          console.warn('Erreur nettoyage précédente:', cleanError);
+        }
+        html5QrCodeRef.current = null;
+      }
+
       // Vérifier que nous sommes en HTTPS ou localhost (requis pour l'accès caméra)
-      if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-        setCameraError('L\'accès à la caméra nécessite une connexion HTTPS. Veuillez utiliser https:// ou tester en localhost.');
+      const isSecure = window.location.protocol === 'https:' || 
+                       window.location.hostname === 'localhost' || 
+                       window.location.hostname === '127.0.0.1';
+      
+      if (!isSecure) {
+        const errorMsg = 'L\'accès à la caméra nécessite une connexion HTTPS. Veuillez utiliser https:// ou tester en localhost.';
+        setCameraError(errorMsg);
         toast.error('HTTPS requis pour la caméra');
         return;
       }
 
       // Vérifier si getUserMedia est disponible
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setCameraError('Votre navigateur ne supporte pas l\'accès à la caméra. Veuillez utiliser un navigateur moderne (Chrome, Firefox, Safari).');
+        const errorMsg = 'Votre navigateur ne supporte pas l\'accès à la caméra. Veuillez utiliser un navigateur moderne (Chrome, Firefox, Safari).';
+        setCameraError(errorMsg);
         toast.error('Navigateur non compatible');
         return;
       }
 
-      // Demander les permissions
-      toast.info('Demande d\'accès à la caméra...');
-      const hasPermission = await requestCameraPermission();
-      
-      if (!hasPermission) {
-        setCameraError('Permission d\'accès à la caméra refusée. Veuillez autoriser l\'accès dans les paramètres de votre navigateur.');
-        toast.error('Permission refusée');
+      // Vérifier que l'élément DOM existe
+      const scannerElement = document.getElementById(scannerId);
+      if (!scannerElement) {
+        const errorMsg = `L'élément de scanner avec l'ID "${scannerId}" n'a pas été trouvé dans le DOM.`;
+        setCameraError(errorMsg);
+        toast.error('Erreur d\'initialisation');
+        console.error('Élément scanner non trouvé:', scannerId);
         return;
       }
 
@@ -152,22 +154,27 @@ const QRScanner = () => {
 
       // Liste des configurations de caméra à essayer (dans l'ordre de préférence)
       const cameraConfigs = [
-        "environment", // Caméra arrière (prioritaire sur mobile)
-        "user",        // Caméra avant (fallback)
+        { facingMode: "environment" }, // Caméra arrière (prioritaire sur mobile)
+        { facingMode: "user" },        // Caméra avant (fallback)
+        null                            // Laisser le navigateur choisir
       ];
 
       let cameraStarted = false;
       let lastError = null;
 
       // Essayer chaque configuration de caméra
-      for (const facingMode of cameraConfigs) {
+      for (let i = 0; i < cameraConfigs.length; i++) {
+        const config = cameraConfigs[i];
         try {
+          console.log(`Tentative de démarrage caméra avec config ${i + 1}/${cameraConfigs.length}:`, config);
+          
           await html5QrCode.start(
-            { facingMode: facingMode },
+            config,
             {
               fps: 10,
               qrbox: { width: 250, height: 250 },
-              aspectRatio: 1.0
+              aspectRatio: 1.0,
+              disableFlip: false
             },
             (decodedText) => {
               // QR code détecté
@@ -178,73 +185,68 @@ const QRScanner = () => {
               // Ne pas afficher d'erreur pour les erreurs de scan continu
             }
           );
+          
           cameraStarted = true;
           setIsScanning(true);
           toast.success('Caméra activée - Scannez un QR code');
+          console.log('Caméra démarrée avec succès');
           break; // Succès, sortir de la boucle
         } catch (configError) {
-          console.warn(`Erreur avec caméra ${facingMode}:`, configError);
+          console.warn(`Erreur avec config ${i + 1}:`, {
+            error: configError,
+            name: configError?.name,
+            message: configError?.message,
+            stack: configError?.stack
+          });
           lastError = configError;
+          
           // Nettoyer avant d'essayer la prochaine config
           try {
             if (html5QrCodeRef.current) {
               await html5QrCodeRef.current.stop();
+              await html5QrCodeRef.current.clear();
             }
           } catch (stopError) {
-            // Ignorer les erreurs de stop
+            console.warn('Erreur lors du nettoyage:', stopError);
           }
         }
       }
 
-      // Si aucune configuration n'a fonctionné, essayer sans spécifier de caméra
       if (!cameraStarted) {
-        try {
-          await html5QrCode.start(
-            null, // Laisser le navigateur choisir la caméra par défaut
-            {
-              fps: 10,
-              qrbox: { width: 250, height: 250 },
-              aspectRatio: 1.0
-            },
-            (decodedText) => {
-              handleQRCodeScanned(decodedText);
-            },
-            (errorMessage) => {
-              // Erreur de scan (normal)
-            }
-          );
-          cameraStarted = true;
-          setIsScanning(true);
-          toast.success('Caméra activée - Scannez un QR code');
-        } catch (fallbackError) {
-          console.error('Erreur avec caméra par défaut:', fallbackError);
-          lastError = fallbackError;
-        }
-      }
-
-      if (!cameraStarted) {
-        throw lastError || new Error('Impossible d\'accéder à la caméra');
+        console.error('Toutes les tentatives de démarrage de caméra ont échoué');
+        throw lastError || new Error('Impossible d\'accéder à la caméra après toutes les tentatives');
       }
 
     } catch (err) {
-      console.error('Erreur caméra:', err);
+      console.error('Erreur caméra complète:', {
+        error: err,
+        name: err?.name,
+        message: err?.message,
+        stack: err?.stack,
+        toString: err?.toString()
+      });
       
       // Messages d'erreur plus détaillés
       let errorMessage = 'Impossible d\'accéder à la caméra. ';
+      let detailedInfo = '';
       
-      if (err.name === 'NotAllowedError' || err.message?.includes('permission') || err.message?.includes('Permission')) {
-        errorMessage += 'Veuillez autoriser l\'accès à la caméra dans les paramètres de votre navigateur et réessayez.';
-      } else if (err.name === 'NotFoundError' || err.message?.includes('no camera') || err.message?.includes('not found')) {
-        errorMessage += 'Aucune caméra trouvée sur cet appareil.';
-      } else if (err.name === 'NotReadableError' || err.message?.includes('not readable') || err.message?.includes('in use')) {
-        errorMessage += 'La caméra est utilisée par une autre application. Fermez les autres applications utilisant la caméra et réessayez.';
-      } else if (err.message?.includes('HTTPS')) {
+      if (err?.name === 'NotAllowedError' || err?.message?.includes('permission') || err?.message?.includes('Permission')) {
+        errorMessage += 'Permission refusée. ';
+        detailedInfo = 'Veuillez autoriser l\'accès à la caméra dans les paramètres de votre navigateur et réessayez.';
+      } else if (err?.name === 'NotFoundError' || err?.message?.includes('no camera') || err?.message?.includes('not found')) {
+        errorMessage += 'Aucune caméra trouvée. ';
+        detailedInfo = 'Vérifiez qu\'une caméra est connectée à votre appareil.';
+      } else if (err?.name === 'NotReadableError' || err?.message?.includes('not readable') || err?.message?.includes('in use')) {
+        errorMessage += 'Caméra non accessible. ';
+        detailedInfo = 'La caméra est peut-être utilisée par une autre application. Fermez les autres applications et réessayez.';
+      } else if (err?.message?.includes('HTTPS')) {
         errorMessage = err.message;
       } else {
-        errorMessage += `Erreur: ${err.message || 'Vérifiez les permissions de votre navigateur ou réessayez.'}`;
+        errorMessage += `Erreur technique. `;
+        detailedInfo = `Détails: ${err?.message || err?.toString() || 'Erreur inconnue'}`;
       }
       
-      setCameraError(errorMessage);
+      setCameraError(errorMessage + detailedInfo);
       toast.error('Erreur d\'accès à la caméra');
       setIsScanning(false);
       
@@ -252,8 +254,9 @@ const QRScanner = () => {
       if (html5QrCodeRef.current) {
         try {
           await html5QrCodeRef.current.stop();
+          await html5QrCodeRef.current.clear();
         } catch (stopError) {
-          // Ignorer
+          console.warn('Erreur lors du nettoyage final:', stopError);
         }
         html5QrCodeRef.current = null;
       }
@@ -398,20 +401,28 @@ const QRScanner = () => {
                   <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
                   <div className="flex-1">
                     <p className="font-semibold mb-1">Erreur d'accès à la caméra</p>
-                    <p className="text-sm mb-2">{cameraError}</p>
+                    <p className="text-sm mb-2 whitespace-pre-wrap">{cameraError}</p>
+                    <details className="mt-2 text-xs">
+                      <summary className="cursor-pointer font-semibold text-red-800 mb-1">Détails techniques (pour débogage)</summary>
+                      <div className="bg-red-50 p-2 rounded mt-1 font-mono text-xs break-all">
+                        {cameraError}
+                      </div>
+                    </details>
                     <div className="mt-3 space-y-1 text-xs bg-red-50 p-2 rounded">
                       <p className="font-semibold">Pour résoudre le problème :</p>
                       <ul className="list-disc list-inside space-y-1 ml-2">
-                        <li>Vérifiez que l'URL commence par <strong>https://</strong></li>
+                        <li>Vérifiez que l'URL commence par <strong>https://</strong> (ou utilisez localhost)</li>
                         <li>Autorisez l'accès à la caméra quand votre navigateur le demande</li>
-                        <li>Vérifiez les paramètres de permissions de votre navigateur</li>
+                        <li>Vérifiez les paramètres de permissions de votre navigateur (icône cadenas dans la barre d'adresse)</li>
                         <li>Sur mobile : vérifiez que la caméra n'est pas utilisée par une autre app</li>
+                        <li>Rafraîchissez la page et réessayez</li>
+                        <li>Ouvrez la console (F12) pour voir les détails de l'erreur</li>
                       </ul>
                     </div>
                     <Button
                       onClick={() => {
                         setCameraError(null);
-                        startCamera();
+                        setTimeout(() => startCamera(), 100);
                       }}
                       className="mt-3 bg-red-600 hover:bg-red-700 text-white text-sm"
                       size="sm"
