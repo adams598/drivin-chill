@@ -3529,14 +3529,29 @@ async def get_all_admin_bookings(admin = Depends(get_admin_user)):
 
 # CORS configuration - MUST be added BEFORE routes
 cors_origins = os.environ.get('CORS_ORIGINS', '*')
+logging.info(f"🌐 CORS_ORIGINS depuis env: {cors_origins}")
+
 if cors_origins == '*':
+    # Si '*' est utilisé, on ne peut pas utiliser allow_credentials=True
     allowed_origins = ['*']
+    allow_creds = False
+    logging.info("🌐 CORS configuré avec allow_origins=['*'] et allow_credentials=False")
 else:
-    allowed_origins = [origin.strip() for origin in cors_origins.split(',') if origin.strip()]
+    # Parser les origines séparées par des virgules et nettoyer les URLs
+    allowed_origins = []
+    for origin in cors_origins.split(','):
+        origin = origin.strip()
+        if origin:
+            # Retirer le slash final s'il existe
+            origin = origin.rstrip('/')
+            allowed_origins.append(origin)
+    
+    allow_creds = True
+    logging.info(f"🌐 CORS configuré avec allow_origins={allowed_origins} et allow_credentials=True")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
+    allow_credentials=allow_creds,
     allow_origins=allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
