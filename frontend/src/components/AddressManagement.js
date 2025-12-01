@@ -372,7 +372,7 @@ const AddressManagement = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Current Settings Display */}
+          {/* Current Settings Display
           {addressSettings && (
             <div className="bg-blue-900 border border-blue-700 rounded-lg p-4">
               <div className="flex items-center justify-between mb-3">
@@ -420,7 +420,7 @@ const AddressManagement = () => {
                 </div>
               </div>
             </div>
-          )}
+          )} */}
 
           {/* Address Text Configuration */}
           <div className="space-y-4">
@@ -465,50 +465,6 @@ const AddressManagement = () => {
                 Cette adresse sera utilisée dans les mentions légales et les CGV
               </p>
             </div>
-          </div>
-
-          {/* GPS Coordinates Configuration */}
-          <div className="space-y-4">
-            <h3 className="text-white text-lg font-medium flex items-center">
-              🌍 Coordonnées GPS pour la carte
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-white">Latitude *</Label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={formData.latitude}
-                  onChange={(e) =>
-                    handleInputChange("latitude", e.target.value)
-                  }
-                  placeholder="45.8336"
-                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                  required
-                />
-                <p className="text-xs text-gray-400">Entre -90 et 90</p>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-white">Longitude *</Label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={formData.longitude}
-                  onChange={(e) =>
-                    handleInputChange("longitude", e.target.value)
-                  }
-                  placeholder="1.2611"
-                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                  required
-                />
-                <p className="text-xs text-gray-400">Entre -180 et 180</p>
-              </div>
-            </div>
-            <p className="text-xs text-gray-400">
-              💡 Les coordonnées GPS sont automatiquement trouvées depuis
-              l'adresse complète. Vous pouvez aussi les modifier manuellement si
-              nécessaire.
-            </p>
           </div>
 
           {/* Information Card */}
