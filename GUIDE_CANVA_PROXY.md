@@ -60,3 +60,4 @@ En attendant de configurer le Worker, vous pouvez :
 3. Utiliser l'URL Imgur dans le formulaire
 
 
+

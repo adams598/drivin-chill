@@ -33,3 +33,4 @@ REACT_APP_CANVA_PROXY_URL=https://canva-image-proxy.drivin-chill-canva.workers.d
 J'ai aussi amélioré le Worker pour mieux extraire l'image spécifique de votre design (en cherchant l'ID du design dans l'URL de l'image).
 
 
+

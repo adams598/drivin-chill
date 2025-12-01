@@ -763,7 +763,7 @@ async def migrate_legacy_time_slots():
                 )
 
 def generate_qr_code(booking_data: dict) -> str:
-    """Generate QR code for booking"""
+    """Generate QR code for booking - returns base64 data URI"""
     qr_data = f"DRIVIN_AND_CHILL\nRéservation: {booking_data['id']}\n{booking_data['first_name']} {booking_data['last_name']}\nDate: {booking_data['booking_date']}\nCréneau: {booking_data['time_slot']}\nPrix: {booking_data['price']}€"
     
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
@@ -777,6 +777,21 @@ def generate_qr_code(booking_data: dict) -> str:
     img.save(buffer, format='PNG')
     img_str = base64.b64encode(buffer.getvalue()).decode()
     return f"data:image/png;base64,{img_str}"
+
+def generate_qr_code_image_bytes(booking_data: dict) -> bytes:
+    """Generate QR code as binary image bytes for email attachments"""
+    qr_data = f"DRIVIN_AND_CHILL\nRéservation: {booking_data['id']}\n{booking_data['first_name']} {booking_data['last_name']}\nDate: {booking_data['booking_date']}\nCréneau: {booking_data['time_slot']}\nPrix: {booking_data['price']}€"
+    
+    qr = qrcode.QRCode(version=1, box_size=10, border=5)
+    qr.add_data(qr_data)
+    qr.make(fit=True)
+    
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    # Convert to bytes
+    buffer = io.BytesIO()
+    img.save(buffer, format='PNG')
+    return buffer.getvalue()
 
 # Initialize Stripe
 stripe_api_key = os.environ.get('STRIPE_SECRET_KEY') or os.environ.get('STRIPE_API_KEY')
@@ -838,11 +853,34 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
             booking_promo_discount_info = booking_db.get("promo_discount_info")
         
         # Récupérer le schedule pour obtenir les informations du film
+        # Essayer avec la date en format ISO string
+        booking_date_str = booking.booking_date.isoformat() if isinstance(booking.booking_date, date) else str(booking.booking_date)
+        time_slot_str = str(booking.time_slot)
+        
+        # Essayer plusieurs variantes de recherche
         schedule = await db.movie_schedules.find_one({
-            "date": booking.booking_date,
-            "time_slot": booking.time_slot,
+            "date": booking_date_str,
+            "time_slot": time_slot_str,
             "is_active": True
         })
+        
+        # Si pas trouvé, essayer avec le format date object
+        if not schedule:
+            schedule = await db.movie_schedules.find_one({
+                "date": booking.booking_date,
+                "time_slot": booking.time_slot,
+                "is_active": True
+            })
+        
+        # Si toujours pas trouvé, essayer avec time_slot en valeur brute
+        if not schedule:
+            schedule = await db.movie_schedules.find_one({
+                "date": booking_date_str,
+                "time_slot": {"$in": [time_slot_str, booking.time_slot, str(booking.time_slot).lower(), str(booking.time_slot).upper()]},
+                "is_active": True
+            })
+        
+        logging.info(f"📧 Schedule trouvé: {schedule is not None}, date: {booking_date_str}, time_slot: {time_slot_str}")
         
         if schedule:
             # Récupérer les heures depuis le schedule
@@ -850,10 +888,68 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
             start_time = schedule.get("start_time")
             end_time = schedule.get("end_time")
             
+            logging.info(f"📧 Horaires depuis schedule: entry={entry_time}, start={start_time}, end={end_time}")
+            
             # Récupérer le film
             movie = await db.movies.find_one({"id": schedule.get("movie_id")})
             if movie:
                 movie_title = movie.get("title", "Film à confirmer")
+                logging.info(f"📧 Film trouvé: {movie_title}")
+        
+        # Si les horaires ne sont pas dans le schedule, utiliser TimeSlotSettings comme fallback
+        if not entry_time or not start_time or not end_time:
+            logging.info(f"📧 Horaires manquants dans schedule, utilisation de TimeSlotSettings comme fallback")
+            try:
+                time_settings = await get_time_slot_settings()
+                time_slot_str = str(booking.time_slot).lower()
+                
+                # Déterminer quel créneau utiliser en comparant avec les valeurs configurées
+                first_slot_match = (time_slot_str == time_settings.first_slot_value.lower() or 
+                                   time_slot_str in time_settings.first_slot_value.lower() or
+                                   time_settings.first_slot_value.lower() in time_slot_str)
+                second_slot_match = (time_slot_str == time_settings.second_slot_value.lower() or 
+                                    time_slot_str in time_settings.second_slot_value.lower() or
+                                    time_settings.second_slot_value.lower() in time_slot_str)
+                third_slot_match = (time_slot_str == time_settings.third_slot_value.lower() or 
+                                   time_slot_str in time_settings.third_slot_value.lower() or
+                                   time_settings.third_slot_value.lower() in time_slot_str)
+                
+                if first_slot_match:
+                    entry_time = entry_time or time_settings.first_slot_entry_time
+                    start_time = start_time or time_settings.first_slot_start_time
+                    end_time = end_time or time_settings.first_slot_end_time
+                    logging.info(f"📧 Utilisation du premier créneau depuis TimeSlotSettings")
+                elif second_slot_match:
+                    entry_time = entry_time or time_settings.second_slot_entry_time
+                    start_time = start_time or time_settings.second_slot_start_time
+                    end_time = end_time or time_settings.second_slot_end_time
+                    logging.info(f"📧 Utilisation du deuxième créneau depuis TimeSlotSettings")
+                elif third_slot_match:
+                    entry_time = entry_time or time_settings.third_slot_entry_time
+                    start_time = start_time or time_settings.third_slot_start_time
+                    end_time = end_time or time_settings.third_slot_end_time
+                    logging.info(f"📧 Utilisation du troisième créneau depuis TimeSlotSettings")
+                else:
+                    # Fallback: essayer de déterminer depuis le time_slot
+                    if "19h" in time_slot_str or "18h" in time_slot_str:
+                        entry_time = entry_time or time_settings.first_slot_entry_time
+                        start_time = start_time or time_settings.first_slot_start_time
+                        end_time = end_time or time_settings.first_slot_end_time
+                        logging.info(f"📧 Fallback: utilisation du premier créneau (détection par heure)")
+                    elif "21h" in time_slot_str and "23h" not in time_slot_str:
+                        entry_time = entry_time or time_settings.second_slot_entry_time
+                        start_time = start_time or time_settings.second_slot_start_time
+                        end_time = end_time or time_settings.second_slot_end_time
+                        logging.info(f"📧 Fallback: utilisation du deuxième créneau (détection par heure)")
+                    elif "23h" in time_slot_str or "01h" in time_slot_str or "1h" in time_slot_str:
+                        entry_time = entry_time or time_settings.third_slot_entry_time
+                        start_time = start_time or time_settings.third_slot_start_time
+                        end_time = end_time or time_settings.third_slot_end_time
+                        logging.info(f"📧 Fallback: utilisation du troisième créneau (détection par heure)")
+                
+                logging.info(f"📧 Horaires depuis TimeSlotSettings: entry={entry_time}, start={start_time}, end={end_time}")
+            except Exception as e:
+                logging.warning(f"⚠️ Erreur lors de la récupération des TimeSlotSettings: {str(e)}")
         
         # Récupérer les informations du code promo si applicable
         if booking_promo_code:
@@ -937,6 +1033,12 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
         logging.error(f"❌ Configuration email non initialisée (conf is None)")
         return False
     
+    # Generate QR code image as bytes for email attachment (inline with Content-ID)
+    # This method ensures the QR code displays in all email clients, even those that block data URIs
+    qr_code_bytes = generate_qr_code_image_bytes(booking.dict())
+    qr_code_cid = f"qrcode_{booking.id}"
+    logging.info(f"📧 QR Code généré en bytes pour l'email (taille: {len(qr_code_bytes)} bytes, CID: {qr_code_cid})")
+    
     # Create email template
     email_template = f"""
     <!DOCTYPE html>
@@ -985,7 +1087,8 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
                 <div class="qr-code">
                     <h3>🎫 Votre billet d'entrée</h3>
                     <p>Présentez ce QR code à l'entrée :</p>
-                    <img src="{qr_code}" alt="QR Code" style="max-width: 200px;">
+                    <img src="cid:qrcode_{booking.id}" alt="QR Code de réservation" style="max-width: 200px; height: auto; display: block; margin: 15px auto; border: 2px solid #667eea; border-radius: 8px; padding: 10px; background-color: white;">
+                    <p style="text-align: center; font-size: 12px; color: #666; margin-top: 10px;">Si l'image ne s'affiche pas, vérifiez que votre client email autorise l'affichage des images.</p>
                 </div>
                 
                 <h3>ℹ️ Informations importantes</h3>
@@ -1013,11 +1116,32 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
     for attempt in range(max_retries):
         try:
             logging.info(f"📧 Tentative {attempt + 1}/{max_retries} d'envoi d'email à {booking.email}")
+            
+            # Create inline attachment for QR code using tuple format (filename, content, headers dict)
+            # FastAPI-Mail supports inline attachments with Content-ID headers
+            qr_filename = f"qrcode_{booking.id}.png"
+            qr_cid = f"qrcode_{booking.id}"
+            
+            # Format: (filename, bytes_content, headers_dict)
+            # Headers must include Content-ID for inline display
+            qr_attachment = (
+                qr_filename,
+                qr_code_bytes,
+                {
+                    "Content-ID": f"<{qr_cid}>",
+                    "Content-Disposition": "inline",
+                    "Content-Type": "image/png"
+                }
+            )
+            
+            logging.info(f"📧 Pièce jointe QR code créée: {qr_filename}, Content-ID: <{qr_cid}>")
+            
             message = MessageSchema(
                 subject="🎬 Confirmation de votre réservation - Drivin And Chill",
                 recipients=[booking.email],
                 body=email_template,
-                subtype=MessageType.html
+                subtype=MessageType.html,
+                attachments=[qr_attachment]
             )
             
             logging.info(f"📧 Création de FastMail avec config: {email_host}:{email_port}, username: {email_username[:3]}***")
