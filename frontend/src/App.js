@@ -713,15 +713,19 @@ function App() {
       const response = await axios.get(
         `${API}/movie-schedules/by-date/${dateString}`
       );
-      setMovieSchedules(response.data);
+      const schedules = response.data || [];
+      setMovieSchedules(schedules);
 
-      // Also fetch availability info for each time slot (using configurable values)
-      const timeSlotValues = timeSlotSettings
-        ? [
-            timeSlotSettings.first_slot_value || "21h15",
-            timeSlotSettings.second_slot_value || "23h45",
-          ]
-        : ["21h15", "23h45"];
+      // Also fetch availability info for each time slot found in schedules
+      const timeSlotValues =
+        schedules.length > 0
+          ? schedules.map((s) => s.schedule.time_slot).filter(Boolean)
+          : timeSlotSettings
+          ? [
+              timeSlotSettings.first_slot_value || "21h15",
+              timeSlotSettings.second_slot_value || "23h45",
+            ]
+          : ["21h15", "23h45"];
       const availabilityPromises = timeSlotValues.map(async (timeSlot) => {
         try {
           const availResponse = await axios.get(
@@ -747,7 +751,7 @@ function App() {
   };
 
   // Handle time slot selection with content info (movie or event)
-  const handleTimeSlotSelect = (timeSlot) => {
+  const handleTimeSlotSelect = async (timeSlot) => {
     setSelectedTimeSlot(timeSlot);
 
     // Find the schedule for this time slot
@@ -761,7 +765,40 @@ function App() {
       const content = scheduleForSlot.content || scheduleForSlot.movie;
       setSelectedMovie(content);
     } else {
-      setSelectedMovie(null);
+      // If not found in current schedules, try to fetch schedules again for the selected date
+      if (selectedDate) {
+        try {
+          const dateString = format(selectedDate, "yyyy-MM-dd");
+          const response = await axios.get(
+            `${API}/movie-schedules/by-date/${dateString}`
+          );
+          const fetchedSchedules = response.data;
+
+          // Update state with fetched schedules
+          setMovieSchedules(fetchedSchedules);
+
+          // Try to find in freshly fetched schedules
+          const updatedSchedule = fetchedSchedules.find(
+            (schedule) => schedule.schedule.time_slot === timeSlot
+          );
+
+          if (updatedSchedule) {
+            const content = updatedSchedule.content || updatedSchedule.movie;
+            setSelectedMovie(content);
+          } else {
+            setSelectedMovie(null);
+            // Don't show warning - backend will handle validation
+            console.warn(
+              `No schedule found for time slot ${timeSlot} on ${dateString}`
+            );
+          }
+        } catch (error) {
+          console.error("Error fetching schedules:", error);
+          setSelectedMovie(null);
+        }
+      } else {
+        setSelectedMovie(null);
+      }
     }
   };
 
@@ -1991,9 +2028,18 @@ function App() {
                 <Select
                   value={selectedTimeSlot}
                   onValueChange={handleTimeSlotSelect}
+                  disabled={!selectedDate}
                 >
                   <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                    <SelectValue placeholder="Choisir un créneau" />
+                    <SelectValue
+                      placeholder={
+                        !selectedDate
+                          ? "Sélectionnez d'abord une date"
+                          : movieSchedules.length === 0 && !isPreFilled
+                          ? "Aucun créneau disponible pour cette date"
+                          : "Choisir un créneau"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent className="bg-gray-800 border-gray-600">
                     {movieSchedules.length > 0 || isPreFilled ? (
@@ -2154,24 +2200,19 @@ function App() {
                           </div>
                         </SelectItem>
                       ) : null
+                    ) : selectedDate ? (
+                      // Only show generic time slots if a date is selected but no schedules found
+                      // This allows users to still make bookings if schedules exist but weren't loaded
+                      <div className="p-2 text-center text-gray-400 text-sm">
+                        Aucun créneau disponible. Les créneaux apparaîtront ici
+                        quand des films seront programmés pour cette date.
+                      </div>
                     ) : (
-                      getTimeSlots().map((slot) => (
-                        <SelectItem
-                          key={slot.value}
-                          value={slot.value}
-                          className="text-white hover:bg-gray-700"
-                        >
-                          <div>
-                            <div className="font-medium">{slot.display}</div>
-                            <div className="text-sm text-gray-400">
-                              {slot.label}
-                            </div>
-                            <div className="text-sm text-orange-400 mt-1">
-                              ⚠️ Film non programmé
-                            </div>
-                          </div>
-                        </SelectItem>
-                      ))
+                      // No date selected yet
+                      <div className="p-2 text-center text-gray-400 text-sm">
+                        Sélectionnez d'abord une date pour voir les créneaux
+                        disponibles
+                      </div>
                     )}
                   </SelectContent>
                 </Select>

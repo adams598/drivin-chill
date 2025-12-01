@@ -921,6 +921,10 @@ async def root():
 @api_router.post("/bookings", response_model=TicketBooking)
 async def create_booking(booking_data: TicketBookingCreate):
     try:
+        # Initialize content_schedule
+        content_schedule = None
+        movie_schedule = None
+        
         # Special handling for events - allow more flexible validation
         if booking_data.content_type == "event":
             # For events, we can be more flexible with day_of_week and time_slot validation
@@ -936,12 +940,33 @@ async def create_booking(booking_data: TicketBookingCreate):
             }
             
             # Check if we have a content schedule for this event
-            content_schedule = await db.content_schedules.find_one({
-                "date": booking_data.booking_date.isoformat(),
-                "content_id": booking_data.content_id,
-                "content_type": "event",
-                "is_active": True
-            })
+            # Try to find by content_id first if provided
+            if booking_data.content_id:
+                content_schedule = await db.content_schedules.find_one({
+                    "date": booking_data.booking_date.isoformat(),
+                    "content_id": booking_data.content_id,
+                    "content_type": "event",
+                    "is_active": True
+                })
+            
+            # If not found and content_id not provided, try to find by time_slot or custom_time
+            if not content_schedule:
+                # Try by time_slot
+                content_schedule = await db.content_schedules.find_one({
+                    "date": booking_data.booking_date.isoformat(),
+                    "time_slot": booking_data.time_slot,
+                    "content_type": "event",
+                    "is_active": True
+                })
+            
+            # If still not found, try by custom_time
+            if not content_schedule:
+                content_schedule = await db.content_schedules.find_one({
+                    "date": booking_data.booking_date.isoformat(),
+                    "custom_time": booking_data.time_slot,
+                    "content_type": "event",
+                    "is_active": True
+                })
             
             if not content_schedule:
                 raise HTTPException(status_code=400, detail="Aucun événement n'est programmé à cette date")
