@@ -48,9 +48,23 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
       const movieSchedules = response.data.filter(
         (item) => item.schedule.content_type === "movie"
       );
-      console.log("🎬 Movies found from API:", movieSchedules.length); // Debug log
-      console.log("📽️ Movie data:", movieSchedules); // Debug log
-      setWeeklySchedule(movieSchedules);
+      
+      // Trier par date (de la plus proche à la plus éloignée)
+      const sortedMovies = movieSchedules.sort((a, b) => {
+        const dateA = new Date(a.schedule.date);
+        const dateB = new Date(b.schedule.date);
+        // Si même date, trier par heure de début si disponible
+        if (dateA.getTime() === dateB.getTime()) {
+          const timeA = a.schedule.start_time || a.schedule.time_slot || "";
+          const timeB = b.schedule.start_time || b.schedule.time_slot || "";
+          return timeA.localeCompare(timeB);
+        }
+        return dateA.getTime() - dateB.getTime();
+      });
+      
+      console.log("🎬 Movies found from API:", sortedMovies.length); // Debug log
+      console.log("📽️ Movie data (sorted by date):", sortedMovies); // Debug log
+      setWeeklySchedule(sortedMovies);
     } catch (error) {
       console.error("Error fetching weekly schedule:", error);
     } finally {
