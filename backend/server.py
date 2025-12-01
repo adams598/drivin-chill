@@ -817,6 +817,7 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
     """Send confirmation email with QR code - with retry mechanism"""
     logging.info(f"📧 send_confirmation_email appelé pour {booking.email}")
     logging.info(f"📧 email_enabled = {email_enabled}")
+    logging.info(f"📧 QR code présent: {qr_code[:50] if qr_code else 'AUCUN'}...")
     
     # Récupérer les informations du film et du schedule
     movie_title = "Film à confirmer"
@@ -854,6 +855,54 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
             movie = await db.movies.find_one({"id": schedule.get("movie_id")})
             if movie:
                 movie_title = movie.get("title", "Film à confirmer")
+        
+        # Si les horaires ne sont pas dans le schedule, les récupérer depuis TimeSlotSettings
+        if not entry_time or not start_time or not end_time:
+            try:
+                time_settings = await get_time_slot_settings()
+                time_slot_str = str(booking.time_slot).lower()
+                
+                # Déterminer quel créneau utiliser en comparant avec les valeurs configurées
+                first_slot_match = (time_slot_str == time_settings.first_slot_value.lower() or 
+                                   time_slot_str in time_settings.first_slot_value.lower() or
+                                   time_settings.first_slot_value.lower() in time_slot_str)
+                second_slot_match = (time_slot_str == time_settings.second_slot_value.lower() or 
+                                    time_slot_str in time_settings.second_slot_value.lower() or
+                                    time_settings.second_slot_value.lower() in time_slot_str)
+                third_slot_match = (time_slot_str == time_settings.third_slot_value.lower() or 
+                                   time_slot_str in time_settings.third_slot_value.lower() or
+                                   time_settings.third_slot_value.lower() in time_slot_str)
+                
+                if first_slot_match:
+                    entry_time = entry_time or time_settings.first_slot_entry_time
+                    start_time = start_time or time_settings.first_slot_start_time
+                    end_time = end_time or time_settings.first_slot_end_time
+                elif second_slot_match:
+                    entry_time = entry_time or time_settings.second_slot_entry_time
+                    start_time = start_time or time_settings.second_slot_start_time
+                    end_time = end_time or time_settings.second_slot_end_time
+                elif third_slot_match:
+                    entry_time = entry_time or time_settings.third_slot_entry_time
+                    start_time = start_time or time_settings.third_slot_start_time
+                    end_time = end_time or time_settings.third_slot_end_time
+                else:
+                    # Fallback: essayer de déterminer depuis le time_slot
+                    if "19h" in time_slot_str or "18h" in time_slot_str:
+                        entry_time = entry_time or time_settings.first_slot_entry_time
+                        start_time = start_time or time_settings.first_slot_start_time
+                        end_time = end_time or time_settings.first_slot_end_time
+                    elif "21h" in time_slot_str:
+                        entry_time = entry_time or time_settings.second_slot_entry_time
+                        start_time = start_time or time_settings.second_slot_start_time
+                        end_time = end_time or time_settings.second_slot_end_time
+                    elif "23h" in time_slot_str or "01h" in time_slot_str or "1h" in time_slot_str:
+                        entry_time = entry_time or time_settings.third_slot_entry_time
+                        start_time = start_time or time_settings.third_slot_start_time
+                        end_time = end_time or time_settings.third_slot_end_time
+                    
+                logging.info(f"📧 Horaires récupérés depuis TimeSlotSettings: entry={entry_time}, start={start_time}, end={end_time}")
+            except Exception as e:
+                logging.warning(f"⚠️ Erreur lors de la récupération des TimeSlotSettings: {str(e)}")
         
         # Récupérer les informations du code promo si applicable
         if booking_promo_code:
@@ -985,7 +1034,7 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
                 <div class="qr-code">
                     <h3>🎫 Votre billet d'entrée</h3>
                     <p>Présentez ce QR code à l'entrée :</p>
-                    <img src="{qr_code}" alt="QR Code" style="max-width: 200px;">
+                    <img src="{qr_code}" alt="QR Code" style="max-width: 200px; height: auto; display: block; margin: 10px auto; border: 2px solid #ddd; padding: 10px; background-color: white;">
                 </div>
                 
                 <h3>ℹ️ Informations importantes</h3>
