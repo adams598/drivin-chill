@@ -59,3 +59,4 @@ En attendant de configurer le Worker, vous pouvez :
 2. L'uploader sur Imgur (imgur.com)
 3. Utiliser l'URL Imgur dans le formulaire
 
+

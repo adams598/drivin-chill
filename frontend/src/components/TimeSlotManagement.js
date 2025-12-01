@@ -7,7 +7,31 @@ import { Label } from './ui/label';
 import { Clock, Save, RotateCcw, Mail, TestTube } from 'lucide-react';
 import { toast } from 'sonner';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+// Nettoyer l'URL du backend (enlever les virgules et slashes en fin)
+const getCleanBackendUrl = () => {
+  const url = process.env.REACT_APP_BACKEND_URL || "";
+  
+  // Si l'URL contient une virgule, on a plusieurs URLs
+  if (url.includes(",")) {
+    const urls = url.split(",").map(u => u.trim()).filter(u => u);
+    
+    // Si on est en développement local (localhost:3000), utiliser localhost:8000
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      const localUrl = urls.find(u => u.includes("localhost") || u.includes("127.0.0.1"));
+      if (localUrl) {
+        return localUrl.replace(/\/+$/, "");
+      }
+    }
+    
+    // Sinon, prendre la première URL (production)
+    return urls[0].replace(/\/+$/, "");
+  }
+  
+  // URL simple, juste nettoyer
+  return url.trim().replace(/\/+$/, "");
+};
+
+const BACKEND_URL = getCleanBackendUrl();
 const API = `${BACKEND_URL}/api`;
 
 const TimeSlotManagement = () => {
@@ -15,24 +39,12 @@ const TimeSlotManagement = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
-    // Valeurs des créneaux (identifiants configurables)
-    first_slot_value: '21h15',      // Identifiant du premier créneau
-    second_slot_value: '23h45',     // Identifiant du deuxième créneau
-    third_slot_value: '01h30',      // Identifiant du troisième créneau
-    // Horaires du premier créneau
     first_slot_entry_time: '18h45',  // Halloween schedule
     first_slot_start_time: '19h00',  // FILM 1: 19H00 - 21H00
-    first_slot_end_time: '21h00',    // Fin de la première séance
-    // Horaires du deuxième créneau
     second_slot_entry_time: '21h00', // Halloween schedule
     second_slot_start_time: '21h15', // FILM 2: 21H15 - 23H15
-    second_slot_end_time: '23h15',   // Fin de la deuxième séance
-    // Horaires du troisième créneau
     third_slot_entry_time: '23h15',  // Halloween schedule
-    third_slot_start_time: '23h30',  // FILM 3: 23H30 - 01H30
-    third_slot_end_time: '01h30',    // Fin de la troisième séance
-    // Paramètres de fermeture de la billetterie
-    booking_closing_hours: 2.0       // Nombre d'heures avant la séance où la billetterie se ferme
+    third_slot_start_time: '23h30'   // FILM 3: 23H30 - 01H30
   });
   const [testingEmail, setTestingEmail] = useState(false);
 
@@ -52,19 +64,10 @@ const TimeSlotManagement = () => {
       const response = await axios.get(`${API}/admin/time-slots`, { headers: authHeaders });
       setTimeSlots(response.data);
       setFormData({
-        first_slot_value: response.data.first_slot_value || '21h15',
-        second_slot_value: response.data.second_slot_value || '23h45',
-        third_slot_value: response.data.third_slot_value || '01h30',
-        first_slot_entry_time: response.data.first_slot_entry_time || '18h45',
-        first_slot_start_time: response.data.first_slot_start_time || '19h00',
-        first_slot_end_time: response.data.first_slot_end_time || '21h00',
-        second_slot_entry_time: response.data.second_slot_entry_time || '21h00',
-        second_slot_start_time: response.data.second_slot_start_time || '21h15',
-        second_slot_end_time: response.data.second_slot_end_time || '23h15',
-        third_slot_entry_time: response.data.third_slot_entry_time || '23h15',
-        third_slot_start_time: response.data.third_slot_start_time || '23h30',
-        third_slot_end_time: response.data.third_slot_end_time || '01h30',
-        booking_closing_hours: response.data.booking_closing_hours || 2.0
+        first_slot_entry_time: response.data.first_slot_entry_time,
+        first_slot_start_time: response.data.first_slot_start_time,
+        second_slot_entry_time: response.data.second_slot_entry_time,
+        second_slot_start_time: response.data.second_slot_start_time
       });
     } catch (error) {
       toast.error('Erreur lors du chargement des horaires');
@@ -108,24 +111,15 @@ const TimeSlotManagement = () => {
   };
 
   const validateTimes = () => {
-    const { 
-      first_slot_entry_time, first_slot_start_time, first_slot_end_time,
-      second_slot_entry_time, second_slot_start_time, second_slot_end_time,
-      third_slot_entry_time, third_slot_start_time, third_slot_end_time
-    } = formData;
+    const { first_slot_entry_time, first_slot_start_time, second_slot_entry_time, second_slot_start_time } = formData;
     
     // Validate format for all fields
     const timeRegex = /^([0-1]?[0-9]|2[0-3])h([0-5][0-9])$/;
     const fields = [
       { name: 'Heure d\'entrée première séance', value: first_slot_entry_time },
       { name: 'Heure de début première séance', value: first_slot_start_time },
-      { name: 'Heure de fin première séance', value: first_slot_end_time },
       { name: 'Heure d\'entrée deuxième séance', value: second_slot_entry_time },
-      { name: 'Heure de début deuxième séance', value: second_slot_start_time },
-      { name: 'Heure de fin deuxième séance', value: second_slot_end_time },
-      { name: 'Heure d\'entrée troisième séance', value: third_slot_entry_time },
-      { name: 'Heure de début troisième séance', value: third_slot_start_time },
-      { name: 'Heure de fin troisième séance', value: third_slot_end_time }
+      { name: 'Heure de début deuxième séance', value: second_slot_start_time }
     ];
     
     for (const field of fields) {
@@ -144,49 +138,21 @@ const TimeSlotManagement = () => {
     try {
       const firstEntry = timeToMinutes(first_slot_entry_time);
       const firstStart = timeToMinutes(first_slot_start_time);
-      const firstEnd = timeToMinutes(first_slot_end_time);
       const secondEntry = timeToMinutes(second_slot_entry_time);
       const secondStart = timeToMinutes(second_slot_start_time);
-      const secondEnd = timeToMinutes(second_slot_end_time);
-      const thirdEntry = timeToMinutes(third_slot_entry_time);
-      const thirdStart = timeToMinutes(third_slot_start_time);
-      const thirdEnd = timeToMinutes(third_slot_end_time);
 
-      // Validation première séance
       if (firstStart <= firstEntry) {
         toast.error('L\'heure de début de la première séance doit être après l\'heure d\'entrée');
         return false;
       }
-      if (firstEnd <= firstStart) {
-        toast.error('L\'heure de fin de la première séance doit être après l\'heure de début');
-        return false;
-      }
 
-      // Validation deuxième séance
       if (secondStart <= secondEntry) {
         toast.error('L\'heure de début de la deuxième séance doit être après l\'heure d\'entrée');
         return false;
       }
-      if (secondEnd <= secondStart) {
-        toast.error('L\'heure de fin de la deuxième séance doit être après l\'heure de début');
-        return false;
-      }
-      if (secondEntry <= firstEnd) {
-        toast.error('La deuxième séance doit commencer après la fin de la première');
-        return false;
-      }
 
-      // Validation troisième séance
-      if (thirdStart <= thirdEntry) {
-        toast.error('L\'heure de début de la troisième séance doit être après l\'heure d\'entrée');
-        return false;
-      }
-      if (thirdEnd <= thirdStart) {
-        toast.error('L\'heure de fin de la troisième séance doit être après l\'heure de début');
-        return false;
-      }
-      if (thirdEntry <= secondEnd) {
-        toast.error('La troisième séance doit commencer après la fin de la deuxième');
+      if (secondEntry <= firstStart) {
+        toast.error('La deuxième séance doit commencer après la première');
         return false;
       }
 
@@ -217,19 +183,10 @@ const TimeSlotManagement = () => {
 
   const resetToDefaults = () => {
     setFormData({
-      first_slot_value: '21h15',
-      second_slot_value: '23h45',
-      third_slot_value: '01h30',
-      first_slot_entry_time: '18h45',
-      first_slot_start_time: '19h00',
-      first_slot_end_time: '21h00',
-      second_slot_entry_time: '21h00',
-      second_slot_start_time: '21h15',
-      second_slot_end_time: '23h15',
-      third_slot_entry_time: '23h15',
-      third_slot_start_time: '23h30',
-      third_slot_end_time: '01h30',
-      booking_closing_hours: 2.0
+      first_slot_entry_time: '20h45',
+      first_slot_start_time: '21h00',
+      second_slot_entry_time: '23h15',
+      second_slot_start_time: '23h30'
     });
     toast.info('Horaires réinitialisés aux valeurs par défaut');
   };
@@ -266,88 +223,57 @@ const TimeSlotManagement = () => {
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="!bg-gray-800 !border-gray-700">
         <CardHeader>
           <CardTitle className="flex items-center text-white">
             <Clock className="mr-2 h-5 w-5" />
             Gestion des Horaires du Drive-In
           </CardTitle>
           <CardDescription className="text-gray-400">
-            Configurez les identifiants des créneaux et les horaires d'entrée, de début et de fin des séances. Ces paramètres s'appliqueront à tout le site.
+            Configurez les horaires d'entrée et de début des séances. Ces horaires s'appliqueront à tout le site.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Current Settings Display */}
-          {timeSlots && (
+          {/* {timeSlots && (
             <div className="bg-blue-900 border border-blue-700 rounded-lg p-4">
               <h3 className="text-blue-100 font-semibold mb-3">Horaires actuels en ligne :</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
                   <div className="text-blue-200 font-medium">🌅 Première séance</div>
-                  <div className="text-blue-100">Identifiant : {timeSlots.first_slot_value || '21h15'}</div>
                   <div className="text-blue-100">Entrée : {timeSlots.first_slot_entry_time}</div>
-                  <div className="text-blue-100">Début : {timeSlots.first_slot_start_time}</div>
-                  <div className="text-blue-100">Fin : {timeSlots.first_slot_end_time || 'N/A'}</div>
+                  <div className="text-blue-100">Début du film : {timeSlots.first_slot_start_time}</div>
                 </div>
                 <div>
                   <div className="text-blue-200 font-medium">🌙 Deuxième séance</div>
-                  <div className="text-blue-100">Identifiant : {timeSlots.second_slot_value || '23h45'}</div>
                   <div className="text-blue-100">Entrée : {timeSlots.second_slot_entry_time}</div>
-                  <div className="text-blue-100">Début : {timeSlots.second_slot_start_time}</div>
-                  <div className="text-blue-100">Fin : {timeSlots.second_slot_end_time || 'N/A'}</div>
-                </div>
-                <div>
-                  <div className="text-blue-200 font-medium">🌃 Troisième séance</div>
-                  <div className="text-blue-100">Identifiant : {timeSlots.third_slot_value || '01h30'}</div>
-                  <div className="text-blue-100">Entrée : {timeSlots.third_slot_entry_time || 'N/A'}</div>
-                  <div className="text-blue-100">Début : {timeSlots.third_slot_start_time || 'N/A'}</div>
-                  <div className="text-blue-100">Fin : {timeSlots.third_slot_end_time || 'N/A'}</div>
+                  <div className="text-blue-100">Début du film : {timeSlots.second_slot_start_time}</div>
                 </div>
               </div>
             </div>
-          )}
+          )} */}
 
           {/* First Slot Configuration */}
           <div className="space-y-4">
             <h3 className="text-white text-lg font-medium flex items-center">
               🌅 Première séance
             </h3>
-            <div className="bg-yellow-900 border border-yellow-600 rounded-lg p-3 mb-4">
-              <Label className="text-yellow-100 font-semibold">Identifiant du créneau (utilisé dans le système)</Label>
-              <Input
-                value={formData.first_slot_value}
-                onChange={(e) => handleInputChange('first_slot_value', e.target.value)}
-                placeholder="21h15"
-                className="bg-gray-700 border-gray-600 text-white placeholder-gray-400 mt-2"
-              />
-              <p className="text-xs text-yellow-200 mt-1">Cet identifiant est utilisé pour identifier ce créneau dans le système (ex: 21h15, 20h00, etc.)</p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-white">Heure d'entrée</Label>
                 <Input
                   value={formData.first_slot_entry_time}
                   onChange={(e) => handleInputChange('first_slot_entry_time', e.target.value)}
-                  placeholder="18h45"
+                  placeholder="20h45"
                   className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
                 />
-                <p className="text-xs text-gray-400">Format: XXhXX (ex: 18h45)</p>
+                <p className="text-xs text-gray-400">Format: XXhXX (ex: 20h45)</p>
               </div>
               <div className="space-y-2">
                 <Label className="text-white">Heure de début du film</Label>
                 <Input
                   value={formData.first_slot_start_time}
                   onChange={(e) => handleInputChange('first_slot_start_time', e.target.value)}
-                  placeholder="19h00"
-                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                />
-                <p className="text-xs text-gray-400">Format: XXhXX (ex: 19h00)</p>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-white">Heure de fin du film</Label>
-                <Input
-                  value={formData.first_slot_end_time}
-                  onChange={(e) => handleInputChange('first_slot_end_time', e.target.value)}
                   placeholder="21h00"
                   className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
                 />
@@ -361,129 +287,27 @@ const TimeSlotManagement = () => {
             <h3 className="text-white text-lg font-medium flex items-center">
               🌙 Deuxième séance
             </h3>
-            <div className="bg-yellow-900 border border-yellow-600 rounded-lg p-3 mb-4">
-              <Label className="text-yellow-100 font-semibold">Identifiant du créneau (utilisé dans le système)</Label>
-              <Input
-                value={formData.second_slot_value}
-                onChange={(e) => handleInputChange('second_slot_value', e.target.value)}
-                placeholder="23h45"
-                className="bg-gray-700 border-gray-600 text-white placeholder-gray-400 mt-2"
-              />
-              <p className="text-xs text-yellow-200 mt-1">Cet identifiant est utilisé pour identifier ce créneau dans le système (ex: 23h45, 22h00, etc.)</p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-white">Heure d'entrée</Label>
                 <Input
                   value={formData.second_slot_entry_time}
                   onChange={(e) => handleInputChange('second_slot_entry_time', e.target.value)}
-                  placeholder="21h00"
+                  placeholder="23h15"
                   className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
                 />
-                <p className="text-xs text-gray-400">Format: XXhXX (ex: 21h00)</p>
+                <p className="text-xs text-gray-400">Format: XXhXX (ex: 23h15)</p>
               </div>
               <div className="space-y-2">
                 <Label className="text-white">Heure de début du film</Label>
                 <Input
                   value={formData.second_slot_start_time}
                   onChange={(e) => handleInputChange('second_slot_start_time', e.target.value)}
-                  placeholder="21h15"
-                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                />
-                <p className="text-xs text-gray-400">Format: XXhXX (ex: 21h15)</p>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-white">Heure de fin du film</Label>
-                <Input
-                  value={formData.second_slot_end_time}
-                  onChange={(e) => handleInputChange('second_slot_end_time', e.target.value)}
-                  placeholder="23h15"
-                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                />
-                <p className="text-xs text-gray-400">Format: XXhXX (ex: 23h15)</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Third Slot Configuration */}
-          <div className="space-y-4">
-            <h3 className="text-white text-lg font-medium flex items-center">
-              🌃 Troisième séance
-            </h3>
-            <div className="bg-yellow-900 border border-yellow-600 rounded-lg p-3 mb-4">
-              <Label className="text-yellow-100 font-semibold">Identifiant du créneau (utilisé dans le système)</Label>
-              <Input
-                value={formData.third_slot_value}
-                onChange={(e) => handleInputChange('third_slot_value', e.target.value)}
-                placeholder="01h30"
-                className="bg-gray-700 border-gray-600 text-white placeholder-gray-400 mt-2"
-              />
-              <p className="text-xs text-yellow-200 mt-1">Cet identifiant est utilisé pour identifier ce créneau dans le système (ex: 01h30, 00h00, etc.)</p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label className="text-white">Heure d'entrée</Label>
-                <Input
-                  value={formData.third_slot_entry_time}
-                  onChange={(e) => handleInputChange('third_slot_entry_time', e.target.value)}
-                  placeholder="23h15"
-                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                />
-                <p className="text-xs text-gray-400">Format: XXhXX (ex: 23h15)</p>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-white">Heure de début du film</Label>
-                <Input
-                  value={formData.third_slot_start_time}
-                  onChange={(e) => handleInputChange('third_slot_start_time', e.target.value)}
                   placeholder="23h30"
                   className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
                 />
                 <p className="text-xs text-gray-400">Format: XXhXX (ex: 23h30)</p>
               </div>
-              <div className="space-y-2">
-                <Label className="text-white">Heure de fin du film</Label>
-                <Input
-                  value={formData.third_slot_end_time}
-                  onChange={(e) => handleInputChange('third_slot_end_time', e.target.value)}
-                  placeholder="01h30"
-                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                />
-                <p className="text-xs text-gray-400">Format: XXhXX (ex: 01h30)</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Booking Closing Hours Configuration */}
-          <div className="space-y-4">
-            <h3 className="text-white text-lg font-medium flex items-center">
-              🔒 Fermeture de la Billetterie
-            </h3>
-            <div className="bg-blue-900 border border-blue-600 rounded-lg p-4">
-              <Label className="text-blue-100 font-semibold">Délai de fermeture (en heures)</Label>
-              <Input
-                type="number"
-                step="0.5"
-                min="0.5"
-                max="24"
-                value={formData.booking_closing_hours}
-                onChange={(e) => {
-                  const value = parseFloat(e.target.value);
-                  if (!isNaN(value) && value >= 0.5 && value <= 24) {
-                    setFormData(prev => ({
-                      ...prev,
-                      booking_closing_hours: value
-                    }));
-                  }
-                }}
-                placeholder="2.0"
-                className="bg-gray-700 border-gray-600 text-white placeholder-gray-400 mt-2"
-              />
-              <p className="text-xs text-blue-200 mt-2">
-                La billetterie se fermera automatiquement {formData.booking_closing_hours} heure{formData.booking_closing_hours > 1 ? 's' : ''} avant chaque séance.
-                <br />
-                Les utilisateurs ne pourront plus réserver une fois ce délai atteint.
-              </p>
             </div>
           </div>
 
@@ -521,7 +345,7 @@ const TimeSlotManagement = () => {
       </Card>
 
       {/* Email Testing Section */}
-      <Card>
+      <Card className="!bg-gray-800 !border-gray-700">
         <CardHeader>
           <CardTitle className="flex items-center text-white">
             <Mail className="mr-2 h-5 w-5" />

@@ -125,7 +125,7 @@ const MovieSuggestionsManagement = () => {
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="!bg-gray-800 !border-gray-700">
         <CardHeader>
           <CardTitle className="flex items-center text-white">
             <Lightbulb className="mr-2 h-5 w-5 text-yellow-400" />

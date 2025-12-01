@@ -1,9 +1,28 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { ArrowLeft, Mail, MapPin, Building } from 'lucide-react';
 
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const API = `${BACKEND_URL}/api`;
+
 const LegalPages = ({ type, onBack }) => {
+  const [addressSettings, setAddressSettings] = useState(null);
+
+  useEffect(() => {
+    fetchAddressSettings();
+  }, []);
+
+  const fetchAddressSettings = async () => {
+    try {
+      const response = await axios.get(`${API}/address`);
+      setAddressSettings(response.data);
+    } catch (error) {
+      console.error("Error fetching address settings:", error);
+      setAddressSettings(null);
+    }
+  };
   const renderMentionsLegales = () => (
     <div className="space-y-6">
       <Card className="bg-gray-800 border-gray-700">
@@ -32,7 +51,7 @@ const LegalPages = ({ type, onBack }) => {
           </div>
           <div className="flex items-center">
             <MapPin className="mr-2 h-4 w-4 text-blue-400" />
-            <strong className="text-white">Adresse :</strong> 10 rue de dion bouton, 87280 Limoges, France
+            <strong className="text-white">Adresse :</strong> {addressSettings?.full_address || "10 rue de dion bouton, 87280 Limoges, France"}
           </div>
         </CardContent>
       </Card>
@@ -99,7 +118,7 @@ const LegalPages = ({ type, onBack }) => {
         <CardContent className="text-gray-300">
           <p>
             Les présentes conditions générales de vente régissent la vente de billets d'entrée 
-            pour le cinéma drive-in "Drivin And Chill" situé au 10 rue de dion bouton, 87280 Limoges.
+            pour le cinéma drive-in "Drivin And Chill" situé au {addressSettings?.full_address || "10 rue de dion bouton, 87280 Limoges"}.
           </p>
         </CardContent>
       </Card>

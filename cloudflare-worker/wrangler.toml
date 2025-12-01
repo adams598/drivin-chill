@@ -7,3 +7,4 @@ routes = [
   { pattern = "canva-proxy.votre-domaine.com", zone_name = "votre-domaine.com" }
 ]
 
+

@@ -161,6 +161,7 @@ function App() {
   const [selectedMovie, setSelectedMovie] = useState(null);
   const [upcomingMovie, setUpcomingMovie] = useState(null);
   const [timeSlotSettings, setTimeSlotSettings] = useState(null);
+  const [addressSettings, setAddressSettings] = useState(null);
   const [isPreFilled, setIsPreFilled] = useState(false);
   const [preFillData, setPreFillData] = useState(null);
   const [availabilityInfo, setAvailabilityInfo] = useState({});
@@ -213,6 +214,7 @@ function App() {
     // Fetch upcoming movie for homepage
     fetchUpcomingMovie();
     fetchTimeSlotSettings();
+    fetchAddressSettings();
   }, []);
   // Global error handler to prevent [object Object] display
   useEffect(() => {
@@ -381,6 +383,17 @@ function App() {
     } catch (error) {
       console.error("Error fetching time slot settings:", error);
       setTimeSlotSettings(null);
+    }
+  };
+
+  // Fetch address settings
+  const fetchAddressSettings = async () => {
+    try {
+      const response = await axios.get(`${API}/address`);
+      setAddressSettings(response.data);
+    } catch (error) {
+      console.error("Error fetching address settings:", error);
+      setAddressSettings(null);
     }
   };
 
@@ -1138,7 +1151,8 @@ function App() {
                     Adresse du cinéma :
                   </h3>
                   <p className="text-blue-200">
-                  Le petit juillac 87100 Limoges
+                    {addressSettings?.address_text ||
+                      "Le petit juillac 87100 Limoges"}
                   </p>
                 </div>
               </div>
@@ -1530,11 +1544,11 @@ function App() {
                   <CardContent className="text-center">
                     <p className="text-orange-100 text-lg mb-2">
                       Entrée :{" "}
-                      {timeSlotSettings?.first_slot_entry_time || "20h45"}
+                      {timeSlotSettings?.first_slot_entry_time || "18h45"}
                     </p>
                     <p className="text-orange-100 text-lg">
                       Diffusion :{" "}
-                      {timeSlotSettings?.first_slot_start_time || "21h00"}
+                      {timeSlotSettings?.first_slot_start_time || "19h00"}
                     </p>
                   </CardContent>
                 </Card>
@@ -1549,11 +1563,11 @@ function App() {
                   <CardContent className="text-center">
                     <p className="text-purple-100 text-lg mb-2">
                       Entrée :{" "}
-                      {timeSlotSettings?.second_slot_entry_time || "23h15"}
+                      {timeSlotSettings?.second_slot_entry_time || "21h00"}
                     </p>
                     <p className="text-purple-100 text-lg">
                       Diffusion :{" "}
-                      {timeSlotSettings?.second_slot_start_time || "23h30"}
+                      {timeSlotSettings?.second_slot_start_time || "21h15"}
                     </p>
                   </CardContent>
                 </Card>
@@ -1599,11 +1613,18 @@ function App() {
                 Notre adresse
               </h3>
               <p className="text-gray-300 text-lg mb-6">
-                <strong>Le petit juillac 87100 Limoges</strong>
+                <strong>
+                  {addressSettings?.address_text ||
+                    "Le petit juillac 87100 Limoges"}
+                </strong>
               </p>
               <div className="mt-8 rounded-lg overflow-hidden shadow-2xl border-2 border-gray-700">
                 <MapContainer
-                  center={[45.8336, 1.2611]}
+                  center={
+                    addressSettings
+                      ? [addressSettings.latitude, addressSettings.longitude]
+                      : [45.8336, 1.2611]
+                  }
                   zoom={15}
                   style={{ height: "400px", width: "100%", zIndex: 0 }}
                   scrollWheelZoom={true}
@@ -1612,11 +1633,19 @@ function App() {
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
-                  <Marker position={[45.8336, 1.2611]}>
+                  <Marker
+                    position={
+                      addressSettings
+                        ? [addressSettings.latitude, addressSettings.longitude]
+                        : [45.8336, 1.2611]
+                    }
+                  >
                     <Popup>
-                      <strong>Le petit juillac</strong>
+                      <strong>
+                        {addressSettings?.address_text || "Le petit juillac"}
+                      </strong>
                       <br />
-                      87100 Limoges, France
+                      {addressSettings?.full_address || "87100 Limoges, France"}
                     </Popup>
                   </Marker>
                 </MapContainer>
@@ -1717,7 +1746,8 @@ function App() {
                   <div className="space-y-2 text-sm">
                     <p className="text-gray-400 flex items-center">
                       <MapPin className="mr-2 h-4 w-4" />
-                      10 rue de dion bouton, 87280 Limoges
+                      {addressSettings?.full_address ||
+                        "Le petit juillac 87100 Limoges"}
                     </p>
                     <p className="text-gray-400 flex items-center">
                       <Mail className="mr-2 h-4 w-4" />

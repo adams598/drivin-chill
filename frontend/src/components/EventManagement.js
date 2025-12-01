@@ -296,7 +296,7 @@ const EventManagement = () => {
             className="bg-green-600 hover:bg-green-700"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Nouvel Événement
+            Ajouter
           </Button>
           <Button
             onClick={() => {
@@ -306,7 +306,7 @@ const EventManagement = () => {
             className="bg-blue-600 hover:bg-blue-700"
           >
             <CalendarIcon className="mr-2 h-4 w-4" />
-            Programmer Événement
+            Programmer
           </Button>
         </div>
       </div>

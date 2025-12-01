@@ -7,7 +7,7 @@ import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
-import { Users, Euro, Calendar, Clock, Film, Settings, LogOut, AlertTriangle, Trash2 } from 'lucide-react';
+import { Users, Euro, Calendar, Clock, Film, Settings, LogOut, AlertTriangle, Trash2, Menu, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -23,6 +23,7 @@ import {
 import SimpleMovieScheduler from './SimpleMovieScheduler';
 import EventManagement from './EventManagement';
 import TimeSlotManagement from './TimeSlotManagement';
+import AddressManagement from './AddressManagement';
 import MovieSuggestionsManagement from './MovieSuggestionsManagement';
 import PromoCodeManagement from './PromoCodeManagement';
 import QRScanner from './QRScanner';
@@ -39,6 +40,7 @@ const AdminDashboard = ({ onLogout }) => {
   const [editingBooking, setEditingBooking] = useState(null);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetConfirmation, setResetConfirmation] = useState(""); // Reset dialog state
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // Mobile menu state
 
   const token = localStorage.getItem('admin_token');
   const authHeaders = {
@@ -161,8 +163,8 @@ const AdminDashboard = ({ onLogout }) => {
   };
 
   const renderDashboard = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="space-y-4 sm:space-y-6 w-full">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Réservations</CardTitle>
@@ -220,7 +222,7 @@ const AdminDashboard = ({ onLogout }) => {
       </div>
 
       {/* Analytics Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         <Card>
           <CardHeader>
             <CardTitle>Répartition par Jour</CardTitle>
@@ -302,15 +304,16 @@ const AdminDashboard = ({ onLogout }) => {
           <CardTitle>Réservations Récentes</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Client</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Créneau</TableHead>
-                <TableHead>Statut</TableHead>
-              </TableRow>
-            </TableHeader>
+          <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="min-w-[120px]">Client</TableHead>
+                  <TableHead className="min-w-[100px]">Date</TableHead>
+                  <TableHead className="min-w-[80px]">Créneau</TableHead>
+                  <TableHead className="min-w-[100px]">Statut</TableHead>
+                </TableRow>
+              </TableHeader>
             <TableBody>
               {dashboardData?.recent_bookings?.map((booking) => (
                 <TableRow key={booking.id}>
@@ -322,6 +325,7 @@ const AdminDashboard = ({ onLogout }) => {
               ))}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -371,41 +375,43 @@ const AdminDashboard = ({ onLogout }) => {
   );
 
   const renderBookings = () => (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 w-full">
       <Card>
         <CardHeader>
-          <CardTitle>Gestion des Réservations</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-lg sm:text-xl">Gestion des Réservations</CardTitle>
+          <CardDescription className="text-sm">
             Gérez toutes les réservations du cinéma drive-in
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Créneau</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
+          <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="min-w-[80px]">ID</TableHead>
+                  <TableHead className="min-w-[120px]">Client</TableHead>
+                  <TableHead className="min-w-[150px] hidden sm:table-cell">Email</TableHead>
+                  <TableHead className="min-w-[100px]">Date</TableHead>
+                  <TableHead className="min-w-[80px]">Créneau</TableHead>
+                  <TableHead className="min-w-[100px]">Statut</TableHead>
+                  <TableHead className="min-w-[80px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
             <TableBody>
               {bookings.map((booking) => (
                 <TableRow key={booking.id}>
                   <TableCell className="font-mono text-xs">{booking.id.substring(0, 8)}...</TableCell>
-                  <TableCell>{booking.first_name} {booking.last_name}</TableCell>
-                  <TableCell>{booking.email}</TableCell>
-                  <TableCell>{format(new Date(booking.booking_date), 'PP', { locale: fr })}</TableCell>
-                  <TableCell>{booking.time_slot}</TableCell>
+                  <TableCell className="font-medium">{booking.first_name} {booking.last_name}</TableCell>
+                  <TableCell className="hidden sm:table-cell text-sm">{booking.email}</TableCell>
+                  <TableCell className="text-sm">{format(new Date(booking.booking_date), 'PP', { locale: fr })}</TableCell>
+                  <TableCell className="text-sm">{booking.time_slot}</TableCell>
                   <TableCell>{getStatusBadge(booking.status, booking.payment_status)}</TableCell>
                   <TableCell>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setEditingBooking(booking)}
+                      className="w-full sm:w-auto"
                     >
                       <Settings className="h-4 w-4" />
                     </Button>
@@ -414,6 +420,7 @@ const AdminDashboard = ({ onLogout }) => {
               ))}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -423,7 +430,7 @@ const AdminDashboard = ({ onLogout }) => {
             <CardTitle>Modifier la Réservation</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label>Prénom</Label>
                 <Input
@@ -481,151 +488,203 @@ const AdminDashboard = ({ onLogout }) => {
     </div>
   );
 
+  const menuItems = [
+    { id: 'dashboard', label: 'Dashboard', color: 'blue' },
+    { id: 'bookings', label: 'Réservations', color: 'blue' },
+    { id: 'movies', label: 'Films', color: 'green' },
+    { id: 'events', label: 'Événements', color: 'orange' },
+    { id: 'suggestions', label: 'Suggestions', color: 'yellow' },
+    { id: 'time-slots', label: 'Horaires', color: 'indigo' },
+    { id: 'address', label: 'Adresse', color: 'blue' },
+    { id: 'scanner', label: 'Scanner QR', color: 'yellow' },
+    { id: 'promo-codes', label: 'Codes Promo', color: 'pink' },
+    { id: 'contacts', label: 'Partenaires', color: 'purple' },
+  ];
+
+  const getTabColor = (tabId) => {
+    const item = menuItems.find(m => m.id === tabId);
+    return item ? item.color : 'blue';
+  };
+
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    setMobileMenuOpen(false);
+  };
+
   const renderContacts = () => (
     <Card>
       <CardHeader>
-        <CardTitle>Demandes Partenaires</CardTitle>
-        <CardDescription>
+        <CardTitle className="text-lg sm:text-xl">Demandes Partenaires</CardTitle>
+        <CardDescription className="text-sm">
           Demandes de publicité et partenariats
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Entreprise</TableHead>
-              <TableHead>Contact</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Message</TableHead>
-              <TableHead>Date</TableHead>
-            </TableRow>
-          </TableHeader>
+        <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="min-w-[120px]">Entreprise</TableHead>
+                <TableHead className="min-w-[120px] hidden md:table-cell">Contact</TableHead>
+                <TableHead className="min-w-[150px]">Email</TableHead>
+                <TableHead className="min-w-[200px] hidden lg:table-cell">Message</TableHead>
+                <TableHead className="min-w-[100px]">Date</TableHead>
+              </TableRow>
+            </TableHeader>
           <TableBody>
             {contacts.map((contact) => (
               <TableRow key={contact.id}>
                 <TableCell className="font-medium">{contact.company_name}</TableCell>
-                <TableCell>{contact.contact_name}</TableCell>
-                <TableCell>{contact.email}</TableCell>
-                <TableCell className="max-w-xs truncate">{contact.message}</TableCell>
-                <TableCell>{format(new Date(contact.created_at), 'PP', { locale: fr })}</TableCell>
+                <TableCell className="hidden md:table-cell">{contact.contact_name}</TableCell>
+                <TableCell className="text-sm break-all">{contact.email}</TableCell>
+                <TableCell className="max-w-xs truncate hidden lg:table-cell">{contact.message}</TableCell>
+                <TableCell className="text-sm">{format(new Date(contact.created_at), 'PP', { locale: fr })}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
+        </div>
       </CardContent>
     </Card>
   );
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <div className="border-b border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <h1 className="text-2xl font-bold">Administration - Drivin And Chill</h1>
-            <Button variant="outline" onClick={onLogout}>
-              <LogOut className="mr-2 h-4 w-4" />
-              Déconnexion
+    <div className="min-h-screen bg-gray-900 text-white overflow-x-hidden">
+      {/* Header */}
+      <div className="border-b border-gray-700 sticky top-0 z-50 bg-gray-900">
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
+          <div className="flex justify-between items-center py-3 sm:py-4">
+            <div className="flex items-center gap-3">
+              {/* Mobile menu button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="lg:hidden text-white hover:bg-gray-800"
+              >
+                {mobileMenuOpen ? (
+                  <X className="h-5 w-5" />
+                ) : (
+                  <Menu className="h-5 w-5" />
+                )}
+              </Button>
+              <h1 className="text-base sm:text-lg lg:text-2xl font-bold">Administration</h1>
+            </div>
+            <Button variant="outline" onClick={onLogout} size="sm" className="text-xs sm:text-sm">
+              <LogOut className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Déconnexion</span>
             </Button>
           </div>
           
-          <nav className="flex space-x-8">
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'dashboard'
-                  ? 'border-blue-500 text-blue-400'
-                  : 'border-transparent text-gray-300 hover:text-white'
-              }`}
-            >
-              Dashboard
-            </button>
-            <button
-              onClick={() => setActiveTab('bookings')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'bookings'
-                  ? 'border-blue-500 text-blue-400'
-                  : 'border-transparent text-gray-300 hover:text-white'
-              }`}
-            >
-              Réservations
-            </button>
-            <button
-              onClick={() => setActiveTab('movies')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'movies'
-                  ? 'border-green-500 text-green-400'
-                  : 'border-transparent text-gray-300 hover:text-white'
-              }`}
-            >
-              Films
-            </button>
-            <button
-              onClick={() => setActiveTab('events')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'events'
-                  ? 'border-orange-500 text-orange-400'
-                  : 'border-transparent text-gray-300 hover:text-white'
-              }`}
-            >
-              Événements
-            </button>
-            <button
-              onClick={() => setActiveTab('suggestions')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'suggestions'
-                  ? 'border-yellow-500 text-yellow-400'
-                  : 'border-transparent text-gray-300 hover:text-white'
-              }`}
-            >
-              Suggestions
-            </button>
-            <button
-              onClick={() => setActiveTab('time-slots')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'time-slots'
-                  ? 'border-indigo-500 text-indigo-400'
-                  : 'border-transparent text-gray-300 hover:text-white'
-              }`}
-            >
-              Horaires
-            </button>
-            <button
-              onClick={() => setActiveTab('scanner')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'scanner'
-                  ? 'border-yellow-500 text-yellow-400'
-                  : 'border-transparent text-gray-300 hover:text-white'
-              }`}
-            >
-              Scanner QR
-            </button>
-            <button
-              onClick={() => setActiveTab('promo-codes')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'promo-codes'
-                  ? 'border-pink-500 text-pink-400'
-                  : 'border-transparent text-gray-300 hover:text-white'
-              }`}
-            >
-              Codes Promo
-            </button>
-            <button
-              onClick={() => setActiveTab('contacts')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'contacts'
-                  ? 'border-purple-500 text-purple-400'
-                  : 'border-transparent text-gray-300 hover:text-white'
-              }`}
-            >
-              Partenaires
-            </button>
+          {/* Desktop Navigation */}
+          <nav className="hidden lg:flex space-x-1 pb-2">
+            {menuItems.map((item) => {
+              const isActive = activeTab === item.id;
+              const colorClasses = {
+                blue: isActive ? 'border-blue-500 text-blue-400' : 'border-transparent text-gray-300 hover:text-white',
+                green: isActive ? 'border-green-500 text-green-400' : 'border-transparent text-gray-300 hover:text-white',
+                orange: isActive ? 'border-orange-500 text-orange-400' : 'border-transparent text-gray-300 hover:text-white',
+                yellow: isActive ? 'border-yellow-500 text-yellow-400' : 'border-transparent text-gray-300 hover:text-white',
+                indigo: isActive ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-300 hover:text-white',
+                pink: isActive ? 'border-pink-500 text-pink-400' : 'border-transparent text-gray-300 hover:text-white',
+                purple: isActive ? 'border-purple-500 text-purple-400' : 'border-transparent text-gray-300 hover:text-white',
+              };
+              
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleTabChange(item.id)}
+                  className={`py-2 px-3 border-b-2 font-medium text-sm transition-colors ${colorClasses[item.color]}`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
           </nav>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Mobile Sidebar Menu */}
+      <div className={`
+        fixed top-0 left-0 h-full w-64 bg-gray-800 border-r border-gray-700 z-50 transform transition-transform duration-300 ease-in-out lg:hidden
+        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+        <div className="p-4 border-b border-gray-700">
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-bold text-white">Menu</h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-white hover:bg-gray-700"
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+        </div>
+        <nav className="flex flex-col p-2">
+          {menuItems.map((item) => {
+            const isActive = activeTab === item.id;
+            const colorClasses = {
+              blue: isActive ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white',
+              green: isActive ? 'bg-green-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white',
+              orange: isActive ? 'bg-orange-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white',
+              yellow: isActive ? 'bg-yellow-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white',
+              indigo: isActive ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white',
+              pink: isActive ? 'bg-pink-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white',
+              purple: isActive ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white',
+            };
+            
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleTabChange(item.id)}
+                className={`text-left py-3 px-4 rounded-lg mb-1 font-medium transition-colors ${colorClasses[item.color]}`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* Mobile Tab Indicator */}
+      <div className="lg:hidden border-b border-gray-700 bg-gray-800 px-4 py-2">
+        <div className="flex items-center gap-2">
+          {(() => {
+            const color = getTabColor(activeTab);
+            const colorMap = {
+              blue: 'bg-blue-500',
+              green: 'bg-green-500',
+              orange: 'bg-orange-500',
+              yellow: 'bg-yellow-500',
+              indigo: 'bg-indigo-500',
+              pink: 'bg-pink-500',
+              purple: 'bg-purple-500',
+            };
+            return <div className={`w-2 h-2 rounded-full ${colorMap[color] || 'bg-blue-500'}`} />;
+          })()}
+          <span className="text-sm font-medium text-gray-300">
+            {menuItems.find(m => m.id === activeTab)?.label || 'Dashboard'}
+          </span>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-6 lg:py-8 w-full">
         {loading ? (
-          <div className="text-center py-8">Chargement...</div>
+          <div className="text-center py-8">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+            <p className="mt-2 text-gray-400">Chargement...</p>
+          </div>
         ) : (
           <>
             {activeTab === 'dashboard' && renderDashboard()}
@@ -634,6 +693,7 @@ const AdminDashboard = ({ onLogout }) => {
             {activeTab === 'events' && <EventManagement />}
             {activeTab === 'suggestions' && <MovieSuggestionsManagement />}
             {activeTab === 'time-slots' && <TimeSlotManagement />}
+            {activeTab === 'address' && <AddressManagement />}
             {activeTab === 'promo-codes' && <PromoCodeManagement />}
             {activeTab === 'scanner' && <QRScanner />}
             {activeTab === 'contacts' && renderContacts()}

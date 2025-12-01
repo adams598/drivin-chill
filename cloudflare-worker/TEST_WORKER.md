@@ -50,3 +50,4 @@ img.src = testUrl;
 **Pour rendre public :**
 - Canva → Partager → Modifier le lien → "Tout le monde avec le lien"
 
+

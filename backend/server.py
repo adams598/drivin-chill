@@ -311,7 +311,6 @@ class TimeSlotSettings(BaseModel):
     third_slot_entry_time: str = "23h15"   # 15min avant 23h30
     third_slot_start_time: str = "23h30"   # FILM 3: 23H30 - 01H30
     third_slot_end_time: str = "01h30"    # Fin de la troisième séance
-    booking_closing_hours: float = 2.0    # Nombre d'heures avant la séance où la billetterie se ferme
     is_active: bool = True
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -330,7 +329,23 @@ class TimeSlotSettingsUpdate(BaseModel):
     third_slot_entry_time: Optional[str] = None
     third_slot_start_time: Optional[str] = None
     third_slot_end_time: Optional[str] = None
-    booking_closing_hours: Optional[float] = None
+    is_active: Optional[bool] = None
+
+# Models for address management
+class AddressSettings(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    address_text: str = "Le petit juillac 87100 Limoges"  # Adresse affichée sur le site
+    full_address: str = "10 rue de dion bouton, 87280 Limoges, France"  # Adresse complète pour mentions légales
+    latitude: float = 45.8336  # Coordonnée GPS latitude
+    longitude: float = 1.2611  # Coordonnée GPS longitude
+    is_active: bool = True
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class AddressSettingsUpdate(BaseModel):
+    address_text: Optional[str] = None
+    full_address: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     is_active: Optional[bool] = None
 
 # Models for promo codes
@@ -441,7 +456,6 @@ class MovieSchedule(BaseModel):
     time_slot: TimeSlot
     entry_time: Optional[str] = None  # Heure d'entrée (ex: "20h45" ou "20:45")
     start_time: Optional[str] = None  # Heure de début du film (ex: "21h00" ou "21:00")
-    end_time: Optional[str] = None  # Heure de fin du film (ex: "23h00" ou "23:00")
     capacity: int = 21  # Customizable capacity per schedule (default 21)
     is_active: bool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -452,7 +466,6 @@ class MovieScheduleCreate(BaseModel):
     time_slot: TimeSlot
     entry_time: Optional[str] = None  # Heure d'entrée (ex: "20h45" ou "20:45")
     start_time: Optional[str] = None  # Heure de début du film (ex: "21h00" ou "21:00")
-    end_time: Optional[str] = None  # Heure de fin du film (ex: "23h00" ou "23:00")
     capacity: int = 21  # Default capacity, can be customized
 
 class MovieScheduleUpdate(BaseModel):
@@ -461,7 +474,6 @@ class MovieScheduleUpdate(BaseModel):
     time_slot: Optional[TimeSlot] = None
     entry_time: Optional[str] = None
     start_time: Optional[str] = None
-    end_time: Optional[str] = None
     capacity: Optional[int] = None
 
     @validator("time_slot", pre=True)
@@ -600,8 +612,7 @@ async def get_time_slot_settings():
             second_slot_end_time="23h15",
             third_slot_entry_time="23h15",
             third_slot_start_time="23h30",
-            third_slot_end_time="01h30",
-            booking_closing_hours=2.0
+            third_slot_end_time="01h30"
         )
     try:
         settings = await db.time_slot_settings.find_one({"is_active": True})
@@ -612,6 +623,28 @@ async def get_time_slot_settings():
     else:
         # Return default settings if none exist
         return TimeSlotSettings()
+
+# Helper function to get current address settings
+async def get_address_settings():
+    """Get the current address settings from database, or return defaults"""
+    if not await check_mongodb_connection():
+        logging.warning("MongoDB non disponible - utilisation des paramètres d'adresse par défaut")
+        # Return default settings when MongoDB is not available
+        return AddressSettings(
+            address_text="Le petit juillac 87100 Limoges",
+            full_address="10 rue de dion bouton, 87280 Limoges, France",
+            latitude=45.8336,
+            longitude=1.2611
+        )
+    try:
+        settings = await db.address_settings.find_one({"is_active": True})
+        if settings:
+            return AddressSettings(**parse_from_mongo(settings))
+    except Exception as e:
+        logging.warning(f"Erreur lors de la récupération des paramètres d'adresse: {e} - utilisation des valeurs par défaut")
+    else:
+        # Return default settings if none exist
+        return AddressSettings()
 
 # Helper functions
 def prepare_for_mongo(data):
@@ -931,7 +964,7 @@ async def create_booking(booking_data: TicketBookingCreate):
         if booking_data.booking_date < datetime.now(timezone.utc).date():
             raise HTTPException(status_code=400, detail="Impossible de réserver pour une date passée")
         
-        # Check 2-hour booking cutoff
+        # Check 8-hour booking cutoff
         time_settings = await get_time_slot_settings()
         
         # Determine the exact show start time based on time slot
@@ -955,7 +988,7 @@ async def create_booking(booking_data: TicketBookingCreate):
         time_until_show = show_datetime_utc - now_utc
         hours_until_show = time_until_show.total_seconds() / 3600
         
-        # We'll check the 2-hour rule later, after calculating if it's a free booking
+        # We'll check the 8-hour rule later, after calculating if it's a free booking
         if hours_until_show < 0:
             raise HTTPException(status_code=400, detail="Cette séance a déjà eu lieu.")
         
@@ -1078,19 +1111,16 @@ async def create_booking(booking_data: TicketBookingCreate):
         if booking_data.final_price is not None:
             final_price = booking_data.final_price
         
-        # Get booking closing hours from settings (default to 2 hours)
-        booking_closing_hours = time_settings.booking_closing_hours if hasattr(time_settings, 'booking_closing_hours') and time_settings.booking_closing_hours is not None else 2.0
-        
-        # Now check the booking closing rule, with exception for free bookings
-        if final_price > 0 and hours_until_show <= booking_closing_hours and hours_until_show >= 0:
+        # Now check the 8-hour rule, with exception for free bookings
+        if final_price > 0 and hours_until_show <= 8 and hours_until_show >= 0:
             raise HTTPException(
                 status_code=400, 
-                detail=f"Les réservations ferment {booking_closing_hours}h avant la séance. Cette séance commence dans {round(hours_until_show, 1)}h. Réservations fermées."
+                detail=f"Les réservations ferment 8h avant la séance. Cette séance commence dans {round(hours_until_show, 1)}h. Réservations fermées."
             )
         
-        # For free bookings (final_price == 0), we allow booking even within the closing window
-        if final_price <= 0 and hours_until_show <= booking_closing_hours and hours_until_show >= 0:
-            logging.info(f"Exception {booking_closing_hours}h pour réservation gratuite: {booking_data.first_name} {booking_data.last_name} - Prix final: {final_price}€")
+        # For free bookings (final_price == 0), we allow booking even within 8h
+        if final_price <= 0 and hours_until_show <= 8 and hours_until_show >= 0:
+            logging.info(f"Exception 24h pour réservation gratuite: {booking_data.first_name} {booking_data.last_name} - Prix final: {final_price}€")
         
         # Create booking object
         booking_dict = booking_data.dict()
@@ -1214,12 +1244,9 @@ async def check_availability(booking_date: str, time_slot: TimeSlot):
         time_until_show = show_datetime_utc - now_utc
         hours_until_show = time_until_show.total_seconds() / 3600
         
-        # Get booking closing hours from settings (default to 2 hours)
-        booking_closing_hours = time_settings.booking_closing_hours if hasattr(time_settings, 'booking_closing_hours') and time_settings.booking_closing_hours is not None else 2.0
-        
-        # Check if we're within the booking closing window
-        is_within_closing_window = hours_until_show <= booking_closing_hours and hours_until_show >= 0
-        has_booking_window_closed = hours_until_show <= booking_closing_hours
+        # Check if we're within 24 hours of the show
+        is_within_24h = hours_until_show <= 24 and hours_until_show >= 0
+        has_booking_window_closed = hours_until_show <= 24
         
         # Count existing bookings for that date and time
         booking_count = await db.bookings.count_documents({
@@ -1260,7 +1287,7 @@ async def check_availability(booking_date: str, time_slot: TimeSlot):
         # Determine closure reason
         closure_reason = None
         if has_booking_window_closed and hours_until_show >= 0:
-            closure_reason = "booking_closed_2h"
+            closure_reason = "booking_closed_24h"
         elif hours_until_show < 0:
             closure_reason = "show_has_passed"
         elif not is_spots_available:
@@ -1276,7 +1303,7 @@ async def check_availability(booking_date: str, time_slot: TimeSlot):
             "hours_until_show": round(hours_until_show, 1),
             "closure_reason": closure_reason,
             "show_datetime": show_datetime_utc.isoformat(),
-            "booking_closes_at": (show_datetime_utc - timedelta(hours=booking_closing_hours)).isoformat()
+            "booking_closes_at": (show_datetime_utc - timedelta(hours=24)).isoformat()
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors de la vérification de disponibilité: {str(e)}")
@@ -2203,8 +2230,7 @@ async def get_public_time_slots():
                 second_slot_end_time="23h15",
                 third_slot_entry_time="23h15",
                 third_slot_start_time="23h30",
-                third_slot_end_time="01h30",
-                booking_closing_hours=2.0
+                third_slot_end_time="01h30"
             )
         return settings
     except Exception as e:
@@ -2222,8 +2248,86 @@ async def get_public_time_slots():
             second_slot_end_time="23h15",
             third_slot_entry_time="23h15",
             third_slot_start_time="23h30",
-            third_slot_end_time="01h30",
-            booking_closing_hours=2.0
+            third_slot_end_time="01h30"
+        )
+
+# Address settings management endpoints
+@api_router.get("/admin/address", response_model=AddressSettings)
+async def get_address(admin = Depends(get_admin_user)):
+    """Get current address settings"""
+    try:
+        return await get_address_settings()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération de l'adresse: {str(e)}")
+
+@api_router.put("/admin/address", response_model=AddressSettings)
+async def update_address(update_data: AddressSettingsUpdate, admin = Depends(get_admin_user)):
+    """Update address settings"""
+    try:
+        logging.info(f"📝 Mise à jour de l'adresse - Données reçues: {update_data.dict()}")
+        
+        # Get current settings
+        current_settings = await get_address_settings()
+        logging.info(f"📋 Paramètres actuels: {current_settings.dict()}")
+        
+        # Prepare update data
+        update_dict = {k: v for k, v in update_data.dict().items() if v is not None}
+        if not update_dict:
+            raise HTTPException(status_code=400, detail="Aucune donnée à mettre à jour")
+        
+        update_dict['updated_at'] = datetime.now(timezone.utc)
+        
+        # First deactivate any existing settings
+        deactivate_result = await db.address_settings.update_many(
+            {"is_active": True},
+            {"$set": {"is_active": False}}
+        )
+        logging.info(f"🔄 Paramètres désactivés: {deactivate_result.modified_count}")
+        
+        # Create new settings with updated values
+        new_settings_dict = current_settings.dict()
+        new_settings_dict.update(update_dict)
+        new_settings_dict['id'] = str(uuid.uuid4())  # New ID for new settings
+        new_settings_dict['is_active'] = True
+        
+        logging.info(f"💾 Nouveaux paramètres à sauvegarder: {new_settings_dict}")
+        
+        new_settings = AddressSettings(**new_settings_dict)
+        settings_mongo = prepare_for_mongo(new_settings.dict())
+        
+        insert_result = await db.address_settings.insert_one(settings_mongo)
+        logging.info(f"✅ Adresse sauvegardée avec l'ID: {insert_result.inserted_id}")
+        
+        return new_settings
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"❌ Erreur lors de la mise à jour de l'adresse: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour de l'adresse: {str(e)}")
+
+@api_router.get("/address", response_model=AddressSettings)
+async def get_public_address():
+    """Get current address settings for public use"""
+    try:
+        settings = await get_address_settings()
+        if settings is None:
+            # Return default settings if MongoDB is not available
+            return AddressSettings(
+                address_text="Le petit juillac 87100 Limoges",
+                full_address="10 rue de dion bouton, 87280 Limoges, France",
+                latitude=45.8336,
+                longitude=1.2611
+            )
+        return settings
+    except Exception as e:
+        logging.error(f"Erreur lors de la récupération de l'adresse: {e}")
+        # Return default settings on error
+        return AddressSettings(
+            address_text="Le petit juillac 87100 Limoges",
+            full_address="10 rue de dion bouton, 87280 Limoges, France",
+            latitude=45.8336,
+            longitude=1.2611
         )
 
 @api_router.post("/admin/test-email")
@@ -2343,6 +2447,34 @@ async def delete_movie_suggestion(suggestion_id: str, admin = Depends(get_admin_
         raise HTTPException(status_code=500, detail=f"Erreur lors de la suppression: {str(e)}")
 
 # Movie schedule endpoints (legacy - for backwards compatibility)
+def parse_time_to_minutes(time_str: str) -> Optional[int]:
+    """Convertit une heure au format '20h45' ou '20:45' en minutes depuis minuit"""
+    if not time_str:
+        return None
+    # Normaliser le format (remplacer 'h' par ':' si nécessaire)
+    normalized = time_str.replace('h', ':')
+    try:
+        parts = normalized.split(':')
+        if len(parts) == 2:
+            hours = int(parts[0])
+            minutes = int(parts[1])
+            return hours * 60 + minutes
+    except (ValueError, IndexError):
+        pass
+    return None
+
+def times_overlap(start1: Optional[int], end1: Optional[int], start2: Optional[int], end2: Optional[int]) -> bool:
+    """Vérifie si deux plages horaires se chevauchent"""
+    if not all([start1, end1, start2, end2]):
+        return False
+    # Gérer le passage à minuit (si end < start, cela signifie que ça passe minuit)
+    if end1 < start1:
+        end1 += 24 * 60
+    if end2 < start2:
+        end2 += 24 * 60
+    # Vérifier le chevauchement
+    return not (end1 <= start2 or end2 <= start1)
+
 @api_router.post("/movie-schedules", response_model=MovieSchedule)
 async def create_movie_schedule(schedule_data: MovieScheduleCreate, admin = Depends(get_admin_user)):
     try:
@@ -2351,21 +2483,66 @@ async def create_movie_schedule(schedule_data: MovieScheduleCreate, admin = Depe
         if not movie:
             raise HTTPException(status_code=404, detail="Film non trouvé")
         
-        # Check if schedule already exists for this date and time slot
-        existing = await db.movie_schedules.find_one({
-            "date": schedule_data.date.isoformat(),
-            "time_slot": schedule_data.time_slot,
-            "is_active": True
-        })
-        
-        existing_content = await db.content_schedules.find_one({
-            "date": schedule_data.date.isoformat(),
-            "time_slot": schedule_data.time_slot,
-            "is_active": True
-        })
-        
-        if existing or existing_content:
-            raise HTTPException(status_code=400, detail="Un contenu est déjà programmé à ce créneau")
+        # Si des horaires personnalisés sont fournis, vérifier les chevauchements d'horaires
+        if schedule_data.start_time and schedule_data.end_time:
+            # Récupérer tous les films programmés le même jour
+            existing_schedules = await db.movie_schedules.find({
+                "date": schedule_data.date.isoformat(),
+                "is_active": True
+            }).to_list(100)
+            
+            existing_content_schedules = await db.content_schedules.find({
+                "date": schedule_data.date.isoformat(),
+                "is_active": True
+            }).to_list(100)
+            
+            # Convertir les horaires de la nouvelle programmation en minutes
+            new_start_minutes = parse_time_to_minutes(schedule_data.start_time)
+            new_end_minutes = parse_time_to_minutes(schedule_data.end_time)
+            
+            if new_start_minutes is None or new_end_minutes is None:
+                raise HTTPException(status_code=400, detail="Format d'heure invalide")
+            
+            # Vérifier les chevauchements avec les films existants
+            for existing in existing_schedules:
+                existing_start = existing.get("start_time")
+                existing_end = existing.get("end_time")
+                
+                if existing_start and existing_end:
+                    existing_start_minutes = parse_time_to_minutes(existing_start)
+                    existing_end_minutes = parse_time_to_minutes(existing_end)
+                    
+                    if existing_start_minutes is not None and existing_end_minutes is not None:
+                        if times_overlap(new_start_minutes, new_end_minutes, existing_start_minutes, existing_end_minutes):
+                            raise HTTPException(
+                                status_code=400, 
+                                detail=f"Un film est déjà programmé à cette heure (chevauchement avec {existing_start} - {existing_end})"
+                            )
+            
+            # Vérifier aussi avec les content_schedules qui utilisent le même time_slot
+            # (on les bloque car ils n'ont généralement pas d'horaires personnalisés)
+            for existing_content in existing_content_schedules:
+                if existing_content.get("time_slot") == schedule_data.time_slot:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Un contenu est déjà programmé à ce créneau horaire"
+                    )
+        else:
+            # Si pas d'horaires personnalisés, vérifier comme avant (même time_slot = conflit)
+            existing = await db.movie_schedules.find_one({
+                "date": schedule_data.date.isoformat(),
+                "time_slot": schedule_data.time_slot,
+                "is_active": True
+            })
+            
+            existing_content = await db.content_schedules.find_one({
+                "date": schedule_data.date.isoformat(),
+                "time_slot": schedule_data.time_slot,
+                "is_active": True
+            })
+            
+            if existing or existing_content:
+                raise HTTPException(status_code=400, detail="Un contenu est déjà programmé à ce créneau")
         
         schedule_obj = MovieSchedule(**schedule_data.dict())
         schedule_mongo = prepare_for_mongo(schedule_obj.dict())
@@ -2468,21 +2645,62 @@ async def update_movie_schedule(schedule_id: str, update_data: MovieScheduleUpda
                 check_time_slot = normalize_time_slot_value(check_time_slot)
             
             # Vérifier les conflits (exclure la programmation actuelle)
-            existing = await db.movie_schedules.find_one({
-                "id": {"$ne": schedule_id},
-                "date": check_date,
-                "time_slot": check_time_slot,
-                "is_active": True
-            })
+            # Utiliser les horaires si disponibles
+            new_start_time = update_dict.get("start_time") or existing_schedule.get("start_time")
+            new_end_time = update_dict.get("end_time") or existing_schedule.get("end_time")
             
-            existing_content = await db.content_schedules.find_one({
-                "date": check_date,
-                "time_slot": check_time_slot,
-                "is_active": True
-            })
-            
-            if existing or existing_content:
-                raise HTTPException(status_code=400, detail="Un contenu est déjà programmé à ce créneau")
+            if new_start_time and new_end_time:
+                # Vérifier les chevauchements d'horaires
+                existing_schedules = await db.movie_schedules.find({
+                    "id": {"$ne": schedule_id},
+                    "date": check_date,
+                    "is_active": True
+                }).to_list(100)
+                
+                new_start_minutes = parse_time_to_minutes(new_start_time)
+                new_end_minutes = parse_time_to_minutes(new_end_time)
+                
+                if new_start_minutes is not None and new_end_minutes is not None:
+                    for existing in existing_schedules:
+                        existing_start = existing.get("start_time")
+                        existing_end = existing.get("end_time")
+                        
+                        if existing_start and existing_end:
+                            existing_start_minutes = parse_time_to_minutes(existing_start)
+                            existing_end_minutes = parse_time_to_minutes(existing_end)
+                            
+                            if existing_start_minutes is not None and existing_end_minutes is not None:
+                                if times_overlap(new_start_minutes, new_end_minutes, existing_start_minutes, existing_end_minutes):
+                                    raise HTTPException(
+                                        status_code=400,
+                                        detail=f"Un film est déjà programmé à cette heure (chevauchement avec {existing_start} - {existing_end})"
+                                    )
+                
+                # Vérifier aussi avec content_schedules (même time_slot = conflit si pas d'horaires)
+                existing_content = await db.content_schedules.find_one({
+                    "date": check_date,
+                    "time_slot": check_time_slot,
+                    "is_active": True
+                })
+                if existing_content:
+                    raise HTTPException(status_code=400, detail="Un contenu est déjà programmé à ce créneau")
+            else:
+                # Pas d'horaires personnalisés, vérifier comme avant
+                existing = await db.movie_schedules.find_one({
+                    "id": {"$ne": schedule_id},
+                    "date": check_date,
+                    "time_slot": check_time_slot,
+                    "is_active": True
+                })
+                
+                existing_content = await db.content_schedules.find_one({
+                    "date": check_date,
+                    "time_slot": check_time_slot,
+                    "is_active": True
+                })
+                
+                if existing or existing_content:
+                    raise HTTPException(status_code=400, detail="Un contenu est déjà programmé à ce créneau")
         
         # Normaliser le time_slot si modifié
         if "time_slot" in update_dict:

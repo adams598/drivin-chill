@@ -131,3 +131,4 @@ Après ces corrections :
 - ✅ Plus d'erreurs CORS
 - ✅ Plus de doubles slashes dans les URLs
 
+
