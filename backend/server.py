@@ -818,11 +818,118 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
     logging.info(f"📧 send_confirmation_email appelé pour {booking.email}")
     logging.info(f"📧 email_enabled = {email_enabled}")
     
+    # Récupérer les informations du film et du schedule
+    movie_title = "Film à confirmer"
+    entry_time = None
+    start_time = None
+    end_time = None
+    promo_info = None
+    booking_final_price = booking.final_price if booking.final_price else booking.price
+    booking_promo_code = booking.promo_code
+    booking_promo_discount_info = booking.promo_discount_info
+    
+    try:
+        # Récupérer le booking depuis la base de données pour avoir toutes les infos à jour
+        booking_db = await db.bookings.find_one({"id": booking.id})
+        if booking_db:
+            # Utiliser les données de la DB pour avoir les infos complètes
+            booking_final_price = booking_db.get("final_price") or booking.price
+            booking_promo_code = booking_db.get("promo_code") or booking.promo_code
+            booking_promo_discount_info = booking_db.get("promo_discount_info")
+        
+        # Récupérer le schedule pour obtenir les informations du film
+        schedule = await db.movie_schedules.find_one({
+            "date": booking.booking_date,
+            "time_slot": booking.time_slot,
+            "is_active": True
+        })
+        
+        if schedule:
+            # Récupérer les heures depuis le schedule
+            entry_time = schedule.get("entry_time")
+            start_time = schedule.get("start_time")
+            end_time = schedule.get("end_time")
+            
+            # Récupérer le film
+            movie = await db.movies.find_one({"id": schedule.get("movie_id")})
+            if movie:
+                movie_title = movie.get("title", "Film à confirmer")
+        
+        # Récupérer les informations du code promo si applicable
+        if booking_promo_code:
+            promo_code_doc = await db.promo_codes.find_one({
+                "code": booking_promo_code.upper().strip(),
+                "is_active": True
+            })
+            
+            if promo_code_doc:
+                promo_type = promo_code_doc.get("type")
+                if promo_type == "reduction_percentage":
+                    # Utiliser discount_amount depuis promo_discount_info si disponible, sinon calculer
+                    if booking_promo_discount_info and booking_promo_discount_info.get("discount_amount"):
+                        discount_amount = booking_promo_discount_info.get("discount_amount", 0)
+                    else:
+                        # Calculer depuis le code promo
+                        promo_value = promo_code_doc.get("value", 0)
+                        discount_amount = (booking.price * promo_value) / 100
+                    
+                    promo_info = {
+                        "code": booking_promo_code,
+                        "type": "reduction",
+                        "discount_amount": round(discount_amount, 2),
+                        "final_price": round(booking_final_price, 2)
+                    }
+                elif promo_type == "free_benefit":
+                    benefit_desc = promo_code_doc.get("benefit_description", "")
+                    promo_info = {
+                        "code": booking_promo_code,
+                        "type": "benefit",
+                        "benefit_description": benefit_desc
+                    }
+    except Exception as e:
+        logging.warning(f"⚠️ Erreur lors de la récupération des infos pour l'email: {str(e)}")
+    
+    # Formater les heures (normaliser le format)
+    def format_time(time_str):
+        if not time_str:
+            return "À confirmer"
+        # Normaliser le format (20h45 -> 20:45 ou garder tel quel)
+        return time_str.replace("h", ":") if "h" in time_str else time_str
+    
+    entry_time_formatted = format_time(entry_time) if entry_time else "À confirmer"
+    start_time_formatted = format_time(start_time) if start_time else "À confirmer"
+    end_time_formatted = format_time(end_time) if end_time else "À confirmer"
+    
+    # Construire la section code promo
+    promo_section = ""
+    if promo_info:
+        if promo_info["type"] == "reduction":
+            promo_section = f"""
+                    <div style="background-color: #e8f5e9; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #4caf50;">
+                        <h4 style="margin: 0 0 10px 0; color: #2e7d32;">🎟️ Code Promo Appliqué</h4>
+                        <p style="margin: 5px 0;"><strong>Code :</strong> {promo_info["code"]}</p>
+                        <p style="margin: 5px 0;"><strong>Réduction :</strong> {promo_info["discount_amount"]:.2f}€</p>
+                        <p style="margin: 5px 0;"><strong>Prix final :</strong> {promo_info["final_price"]:.2f}€</p>
+                    </div>
+            """
+        elif promo_info["type"] == "benefit":
+            promo_section = f"""
+                    <div style="background-color: #e8f5e9; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #4caf50;">
+                        <h4 style="margin: 0 0 10px 0; color: #2e7d32;">🎟️ Code Promo Appliqué</h4>
+                        <p style="margin: 5px 0;"><strong>Code :</strong> {promo_info["code"]}</p>
+                        <p style="margin: 5px 0;"><strong>Avantages inclus :</strong> {promo_info["benefit_description"]}</p>
+                    </div>
+            """
+    
     if not email_enabled:
         # Simulate email for demo/development
         logging.info(f"📧 [SIMULATION] Email envoyé à {booking.email}")
         logging.info(f"📧 Sujet: Confirmation de votre réservation - Drivin And Chill")
         logging.info(f"📧 QR Code inclus pour la réservation {booking.id}")
+        logging.info(f"📧 Film: {movie_title}")
+        logging.info(f"📧 Heures: Entrée {entry_time_formatted}, Début {start_time_formatted}, Fin {end_time_formatted}")
+        if promo_info:
+            logging.info(f"📧 Code promo: {promo_info['code']}")
         logging.warning(f"⚠️ EMAIL EN MODE SIMULATION - Configurez EMAIL_USERNAME et EMAIL_PASSWORD dans .env pour activer l'envoi réel")
         return True
     
@@ -863,7 +970,15 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
                     <p><strong>ID de réservation :</strong> {booking.id}</p>
                     <p><strong>Date :</strong> {booking.booking_date}</p>
                     <p><strong>Créneau :</strong> {booking.time_slot}</p>
-                    <p><strong>Prix :</strong> {booking.price}€</p>
+                    <p><strong>Film :</strong> {movie_title}</p>
+                    <hr style="border: none; border-top: 1px solid #ddd; margin: 15px 0;">
+                    <h4 style="margin: 15px 0 10px 0; color: #667eea;">⏰ Horaires</h4>
+                    <p><strong>Heure d'entrée :</strong> {entry_time_formatted}</p>
+                    <p><strong>Heure de début du film :</strong> {start_time_formatted}</p>
+                    <p><strong>Heure de fin du film :</strong> {end_time_formatted}</p>
+                    <hr style="border: none; border-top: 1px solid #ddd; margin: 15px 0;">
+                    <p><strong>Prix :</strong> {booking_final_price:.2f}€</p>
+                    {promo_section}
                     <p><strong>Statut :</strong> Confirmé</p>
                 </div>
                 

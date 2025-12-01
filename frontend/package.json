@@ -38,6 +38,7 @@
     "cra-template": "1.2.0",
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.6.0",
+    "html5-qrcode": "^2.3.8",
     "input-otp": "^1.4.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.507.0",

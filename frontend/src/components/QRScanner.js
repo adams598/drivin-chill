@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import { Html5Qrcode } from 'html5-qrcode';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Badge } from './ui/badge';
-import { QrCode, CheckCircle, XCircle, AlertCircle, User, Calendar, Clock, Film } from 'lucide-react';
+import { QrCode, CheckCircle, XCircle, AlertCircle, User, Calendar, Clock, Film, Camera, CameraOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -18,6 +19,10 @@ const QRScanner = () => {
   const [scanResult, setScanResult] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [cameraError, setCameraError] = useState(null);
+  const html5QrCodeRef = useRef(null);
+  const scannerId = 'qr-reader';
 
   const token = localStorage.getItem('admin_token');
   const authHeaders = {
@@ -96,7 +101,99 @@ const QRScanner = () => {
     setBookingId('');
     setScanResult(null);
     setValidationResult(null);
+    stopCamera();
   };
+
+  const startCamera = async () => {
+    try {
+      setCameraError(null);
+      const html5QrCode = new Html5Qrcode(scannerId);
+      html5QrCodeRef.current = html5QrCode;
+
+      await html5QrCode.start(
+        { facingMode: "environment" }, // Utilise la caméra arrière
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0
+        },
+        (decodedText) => {
+          // QR code détecté
+          handleQRCodeScanned(decodedText);
+        },
+        (errorMessage) => {
+          // Erreur de scan (normal, continue à scanner)
+        }
+      );
+      setIsScanning(true);
+      toast.success('Caméra activée - Scannez un QR code');
+    } catch (err) {
+      console.error('Erreur caméra:', err);
+      setCameraError('Impossible d\'accéder à la caméra. Vérifiez les permissions.');
+      toast.error('Erreur d\'accès à la caméra');
+      setIsScanning(false);
+    }
+  };
+
+  const stopCamera = async () => {
+    try {
+      if (html5QrCodeRef.current) {
+        await html5QrCodeRef.current.stop();
+        await html5QrCodeRef.current.clear();
+        html5QrCodeRef.current = null;
+      }
+      setIsScanning(false);
+      setCameraError(null);
+    } catch (err) {
+      console.error('Erreur arrêt caméra:', err);
+    }
+  };
+
+  const handleQRCodeScanned = async (qrText) => {
+    // Arrêter la caméra après scan
+    await stopCamera();
+    
+    // Extraire l'ID de réservation
+    const extractedId = extractBookingIdFromQR(qrText);
+    setBookingId(extractedId);
+    
+    // Valider automatiquement
+    toast.info('QR Code détecté, validation en cours...');
+    await validateQRCodeFromId(extractedId);
+  };
+
+  const validateQRCodeFromId = async (id) => {
+    if (!id.trim()) {
+      toast.error('ID de réservation invalide');
+      return;
+    }
+
+    setIsLoading(true);
+    setValidationResult(null);
+    
+    try {
+      const response = await axios.get(`${API}/validate-qr/${id}`);
+      setValidationResult(response.data);
+      
+      if (response.data.status === 'valid') {
+        toast.success('QR Code valide !');
+      } else {
+        toast.error(response.data.message || 'QR Code invalide');
+      }
+    } catch (error) {
+      toast.error('Erreur lors de la validation');
+      setValidationResult({ status: 'error', message: 'Erreur de validation' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // Nettoyer la caméra au démontage
+    return () => {
+      stopCamera();
+    };
+  }, []);
 
   const getStatusIcon = (status) => {
     switch (status) {
@@ -136,15 +233,66 @@ const QRScanner = () => {
         </CardHeader>
         <CardContent className="space-y-6">
           
+          {/* Camera Scanner Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label className="text-white text-lg font-semibold">Scanner avec la caméra</Label>
+              <div className="flex gap-2">
+                {!isScanning ? (
+                  <Button 
+                    onClick={startCamera}
+                    disabled={isLoading}
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    <Camera className="mr-2 h-4 w-4" />
+                    Activer la caméra
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={stopCamera}
+                    variant="outline"
+                    className="bg-red-600 hover:bg-red-700 text-white border-red-600"
+                  >
+                    <CameraOff className="mr-2 h-4 w-4" />
+                    Arrêter la caméra
+                  </Button>
+                )}
+              </div>
+            </div>
+            
+            {isScanning && (
+              <div className="relative">
+                <div id={scannerId} className="w-full max-w-md mx-auto rounded-lg overflow-hidden border-2 border-blue-500"></div>
+                <p className="text-center text-gray-300 mt-2 text-sm">Pointez la caméra vers le QR code</p>
+              </div>
+            )}
+
+            {cameraError && (
+              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                <p className="text-sm">{cameraError}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-600"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-gray-800 text-gray-400">OU</span>
+            </div>
+          </div>
+          
           {/* QR Input Section */}
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label className="text-white">QR Code ou ID de réservation</Label>
+              <Label className="text-white">Saisie manuelle - QR Code ou ID de réservation</Label>
               <div className="flex gap-2">
                 <Input
                   value={bookingId}
                   onChange={(e) => setBookingId(e.target.value)}
-                  placeholder="Scannez le QR code ou tapez l'ID..."
+                  placeholder="Tapez l'ID de réservation..."
                   className="bg-gray-700 border-gray-600 text-white placeholder-gray-400 flex-1"
                   onKeyDown={(e) => e.key === 'Enter' && validateQRCode()}
                 />
@@ -296,11 +444,12 @@ const QRScanner = () => {
           <CardTitle className="text-white text-lg">Instructions d'utilisation</CardTitle>
         </CardHeader>
         <CardContent className="text-gray-300 space-y-2">
-          <p>• <strong>Étape 1 :</strong> Le client vous présente son QR code</p>
-          <p>• <strong>Étape 2 :</strong> Scannez ou tapez l'ID de réservation</p>
-          <p>• <strong>Étape 3 :</strong> Vérifiez les informations affichées</p>
+          <p>• <strong>Méthode 1 (Recommandée) :</strong> Cliquez sur "Activer la caméra" et pointez vers le QR code du client</p>
+          <p>• <strong>Méthode 2 :</strong> Saisissez manuellement l'ID de réservation</p>
+          <p>• <strong>Étape 3 :</strong> Vérifiez les informations affichées (nom, date, créneau)</p>
           <p>• <strong>Étape 4 :</strong> Cliquez "Autoriser l'entrée" si tout est correct</p>
           <p>• <strong>Statuts :</strong> Vert = Autorisé, Rouge = Refusé, Orange = Déjà entré</p>
+          <p className="text-yellow-400 mt-2">⚠️ <strong>Note :</strong> La caméra nécessite l'autorisation de votre navigateur</p>
         </CardContent>
       </Card>
     </div>
