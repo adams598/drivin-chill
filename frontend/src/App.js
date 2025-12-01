@@ -215,6 +215,13 @@ function App() {
     fetchUpcomingMovie();
     fetchTimeSlotSettings();
     fetchAddressSettings();
+
+    // Recharger les horaires toutes les 30 secondes pour avoir les dernières mises à jour
+    const interval = setInterval(() => {
+      fetchTimeSlotSettings();
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, []);
   // Global error handler to prevent [object Object] display
   useEffect(() => {
@@ -379,9 +386,11 @@ function App() {
   const fetchTimeSlotSettings = async () => {
     try {
       const response = await axios.get(`${API}/time-slots`);
+      console.log("✅ Time slot settings chargés:", response.data);
       setTimeSlotSettings(response.data);
     } catch (error) {
-      console.error("Error fetching time slot settings:", error);
+      console.error("❌ Error fetching time slot settings:", error);
+      console.error("⚠️ Utilisation des valeurs par défaut");
       setTimeSlotSettings(null);
     }
   };
@@ -1533,6 +1542,17 @@ function App() {
                 Nos créneaux
               </h2>
 
+              {/* Debug: Afficher les horaires chargés */}
+              {process.env.NODE_ENV === "development" && timeSlotSettings && (
+                <div className="mb-4 p-2 bg-blue-900 rounded text-xs text-blue-200 text-center">
+                  🔧 Debug: Horaires chargés - 1ère:{" "}
+                  {timeSlotSettings.first_slot_entry_time}/
+                  {timeSlotSettings.first_slot_start_time} | 2ème:{" "}
+                  {timeSlotSettings.second_slot_entry_time}/
+                  {timeSlotSettings.second_slot_start_time}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <Card className="bg-orange-800 border-orange-600 hover:bg-orange-700 transition-all duration-300">
                   <CardHeader className="text-center">
@@ -1542,14 +1562,19 @@ function App() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="text-center">
-                    <p className="text-orange-100 text-lg mb-2">
+                    <p className="text-orange-100 text-lg mb-2 font-semibold">
                       Entrée :{" "}
                       {timeSlotSettings?.first_slot_entry_time || "18h45"}
                     </p>
-                    <p className="text-orange-100 text-lg">
+                    <p className="text-orange-100 text-lg font-semibold">
                       Diffusion :{" "}
                       {timeSlotSettings?.first_slot_start_time || "19h00"}
                     </p>
+                    {timeSlotSettings?.first_slot_end_time && (
+                      <p className="text-orange-200 text-sm mt-2 opacity-75">
+                        Fin : {timeSlotSettings.first_slot_end_time}
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -1561,14 +1586,19 @@ function App() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="text-center">
-                    <p className="text-purple-100 text-lg mb-2">
+                    <p className="text-purple-100 text-lg mb-2 font-semibold">
                       Entrée :{" "}
                       {timeSlotSettings?.second_slot_entry_time || "21h00"}
                     </p>
-                    <p className="text-purple-100 text-lg">
+                    <p className="text-purple-100 text-lg font-semibold">
                       Diffusion :{" "}
                       {timeSlotSettings?.second_slot_start_time || "21h15"}
                     </p>
+                    {timeSlotSettings?.second_slot_end_time && (
+                      <p className="text-purple-200 text-sm mt-2 opacity-75">
+                        Fin : {timeSlotSettings.second_slot_end_time}
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               </div>
