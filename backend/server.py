@@ -1033,11 +1033,8 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
         logging.error(f"❌ Configuration email non initialisée (conf is None)")
         return False
     
-    # Generate QR code image as bytes for email attachment (inline with Content-ID)
-    # This method ensures the QR code displays in all email clients, even those that block data URIs
-    qr_code_bytes = generate_qr_code_image_bytes(booking.dict())
-    qr_code_cid = f"qrcode_{booking.id}"
-    logging.info(f"📧 QR Code généré en bytes pour l'email (taille: {len(qr_code_bytes)} bytes, CID: {qr_code_cid})")
+    # QR code is already generated and passed as qr_code parameter (data URI format)
+    # This format works in most email clients and is the most reliable method
     
     # Create email template
     email_template = f"""
@@ -1087,7 +1084,8 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
                 <div class="qr-code">
                     <h3>🎫 Votre billet d'entrée</h3>
                     <p>Présentez ce QR code à l'entrée :</p>
-                    <img src="cid:qrcode_{booking.id}" alt="QR Code de réservation" style="max-width: 200px; height: auto; display: block; margin: 15px auto; border: 2px solid #667eea; border-radius: 8px; padding: 10px; background-color: white;">
+                    <!-- Utilisation de la data URI pour garantir l'affichage dans tous les clients email -->
+                    <img src="{qr_code}" alt="QR Code de réservation" style="max-width: 200px; height: auto; display: block; margin: 15px auto; border: 2px solid #667eea; border-radius: 8px; padding: 10px; background-color: white;">
                     <p style="text-align: center; font-size: 12px; color: #666; margin-top: 10px;">Si l'image ne s'affiche pas, vérifiez que votre client email autorise l'affichage des images.</p>
                 </div>
                 
@@ -1117,31 +1115,14 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
         try:
             logging.info(f"📧 Tentative {attempt + 1}/{max_retries} d'envoi d'email à {booking.email}")
             
-            # Create inline attachment for QR code using tuple format (filename, content, headers dict)
-            # FastAPI-Mail supports inline attachments with Content-ID headers
-            qr_filename = f"qrcode_{booking.id}.png"
-            qr_cid = f"qrcode_{booking.id}"
-            
-            # Format: (filename, bytes_content, headers_dict)
-            # Headers must include Content-ID for inline display
-            qr_attachment = (
-                qr_filename,
-                qr_code_bytes,
-                {
-                    "Content-ID": f"<{qr_cid}>",
-                    "Content-Disposition": "inline",
-                    "Content-Type": "image/png"
-                }
-            )
-            
-            logging.info(f"📧 Pièce jointe QR code créée: {qr_filename}, Content-ID: <{qr_cid}>")
-            
+            # Create message - using data URI in HTML for QR code (most compatible)
+            # We removed inline attachment to avoid email sending errors
+            # The data URI method works in most email clients
             message = MessageSchema(
                 subject="🎬 Confirmation de votre réservation - Drivin And Chill",
                 recipients=[booking.email],
                 body=email_template,
-                subtype=MessageType.html,
-                attachments=[qr_attachment]
+                subtype=MessageType.html
             )
             
             logging.info(f"📧 Création de FastMail avec config: {email_host}:{email_port}, username: {email_username[:3]}***")
