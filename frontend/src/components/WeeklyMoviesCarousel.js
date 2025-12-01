@@ -48,7 +48,7 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
       const movieSchedules = response.data.filter(
         (item) => item.schedule.content_type === "movie"
       );
-      
+
       // Trier par date (de la plus proche à la plus éloignée)
       const sortedMovies = movieSchedules.sort((a, b) => {
         const dateA = new Date(a.schedule.date);
@@ -61,7 +61,7 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
         }
         return dateA.getTime() - dateB.getTime();
       });
-      
+
       console.log("🎬 Movies found from API:", sortedMovies.length); // Debug log
       console.log("📽️ Movie data (sorted by date):", sortedMovies); // Debug log
       setWeeklySchedule(sortedMovies);
@@ -174,7 +174,6 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
           <p className="text-blue-200">
             {weeklySchedule.length}{" "}
             {weeklySchedule.length > 1 ? "films programmés" : "film programmé"}{" "}
-            • Défilement automatique
           </p>
         </CardHeader>
 
