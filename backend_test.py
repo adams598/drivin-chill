@@ -3708,7 +3708,7 @@ class DriveInCinemaAPITester:
         booking_data = {
             "first_name": "EmailTest",
             "last_name": "User",
-            "email": "emailtest@example.com",
+            "email": "adamsdexter3@gmail.com",
             "phone": "06 12 34 56 99",
             "booking_date": next_friday.isoformat(),
             "day_of_week": "vendredi",

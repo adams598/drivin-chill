@@ -103,11 +103,41 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
     }
   };
 
+  // Fonction pour convertir les minutes en format HH:mm
+  const formatDuration = (minutes) => {
+    if (!minutes) return "";
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours > 0) {
+      return `${hours}h${mins.toString().padStart(2, "0")}`;
+    }
+    return `${mins}min`;
+  };
+
+  // Fonction pour normaliser le format d'heure en HH:mm
+  const formatTimeToHHmm = (timeStr) => {
+    if (!timeStr) return "";
+    // Normaliser les formats "20h45" ou "20:45" vers "HH:mm"
+    const normalized = timeStr.replace("h", ":");
+    // S'assurer qu'il y a deux chiffres pour les minutes
+    const parts = normalized.split(":");
+    if (parts.length === 2) {
+      const hours = parts[0].padStart(2, "0");
+      const minutes = parts[1].padStart(2, "0");
+      return `${hours}:${minutes}`;
+    }
+    return normalized;
+  };
+
   const getDisplayTime = (schedule) => {
     // Priorité aux horaires réels si disponibles
     if (schedule.entry_time && schedule.start_time) {
-      return `Entrée: ${schedule.entry_time} • Film: ${schedule.start_time}${
-        schedule.end_time ? ` • Fin: ${schedule.end_time}` : ""
+      return `Entrée: ${formatTimeToHHmm(
+        schedule.entry_time
+      )} • Film: ${formatTimeToHHmm(schedule.start_time)}${
+        schedule.end_time
+          ? ` • Fin: ${formatTimeToHHmm(schedule.end_time)}`
+          : ""
       }`;
     }
 
@@ -199,7 +229,7 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
                       variant="secondary"
                       className="bg-blue-600 text-blue-100 text-sm px-3 py-1"
                     >
-                      {currentItem.content.duration_minutes} min
+                      {formatDuration(currentItem.content.duration_minutes)}
                     </Badge>
                     <Badge
                       variant="secondary"
@@ -313,9 +343,13 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
                     <div className="text-right">
                       <div className="text-green-100 font-semibold text-lg">
                         {currentItem.schedule.start_time
-                          ? `Film à ${currentItem.schedule.start_time}${
+                          ? `Film à ${formatTimeToHHmm(
+                              currentItem.schedule.start_time
+                            )}${
                               currentItem.schedule.end_time
-                                ? ` (fin: ${currentItem.schedule.end_time})`
+                                ? ` (fin: ${formatTimeToHHmm(
+                                    currentItem.schedule.end_time
+                                  )})`
                                 : ""
                             }`
                           : currentItem.schedule.time_slot === "21h15" ||
@@ -332,7 +366,14 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
                         Capacité : {currentItem.schedule.capacity || 21}{" "}
                         voitures
                         {currentItem.content?.duration_minutes
-                          ? ` • Durée: ${currentItem.content.duration_minutes} min`
+                          ? ` • Durée: ${formatDuration(
+                              currentItem.content.duration_minutes
+                            )}`
+                          : ""}
+                        {currentItem.schedule.end_time
+                          ? ` • Fin: ${formatTimeToHHmm(
+                              currentItem.schedule.end_time
+                            )}`
                           : ""}
                       </div>
                     </div>

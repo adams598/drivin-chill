@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends, Query
 from fastapi.security import HTTPBearer
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -335,7 +335,7 @@ class TimeSlotSettingsUpdate(BaseModel):
 class AddressSettings(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     address_text: str = "Le petit juillac 87100 Limoges"  # Adresse affichée sur le site
-    full_address: str = "10 rue de dion bouton, 87280 Limoges, France"  # Adresse complète pour mentions légales
+    full_address: str = "Le petit juillac 87100 Limoges"  # Adresse complète pour mentions légales
     latitude: float = 45.8336  # Coordonnée GPS latitude
     longitude: float = 1.2611  # Coordonnée GPS longitude
     is_active: bool = True
@@ -2333,15 +2333,33 @@ async def get_public_address():
             longitude=1.2611
         )
 
+@api_router.get("/admin/email-status")
+async def get_email_status(admin = Depends(get_admin_user)):
+    """Get email configuration status"""
+    return {
+        "email_enabled": email_enabled,
+        "email_configured": email_username is not None and email_password is not None,
+        "email_host": email_host,
+        "email_port": email_port,
+        "email_from": email_username if email_enabled else None,
+        "message": "Email activé" if email_enabled else "Email en mode simulation - configurez EMAIL_USERNAME et EMAIL_PASSWORD"
+    }
+
 @api_router.post("/admin/test-email")
-async def test_email_sending(admin = Depends(get_admin_user)):
+async def test_email_sending(
+    recipient: Optional[str] = Query(None, description="Adresse email de test (optionnel)"),
+    admin = Depends(get_admin_user)
+):
     """Test email sending functionality"""
     try:
+        # Use provided recipient or default test email
+        test_email = recipient or "adamsdexter3@gmail.com"
+        
         # Create a test booking
         test_booking = TicketBooking(
             first_name="Test",
             last_name="User",
-            email="test@example.com",
+            email=test_email,
             booking_date=datetime.now(timezone.utc).date(),
             day_of_week=DayOfWeek.FRIDAY,
             time_slot=TimeSlot.FIRST_SHOW,
@@ -2359,17 +2377,20 @@ async def test_email_sending(admin = Depends(get_admin_user)):
                 "status": "success",
                 "message": "Email de test envoyé avec succès",
                 "email_enabled": email_enabled,
-                "recipient": test_booking.email
+                "recipient": test_booking.email,
+                "config_status": "configured" if email_enabled else "simulated"
             }
         else:
             return {
                 "status": "error",
                 "message": "Échec de l'envoi de l'email de test",
                 "email_enabled": email_enabled,
+                "recipient": test_booking.email,
                 "details": "Vérifiez la configuration SMTP et les logs du serveur"
             }
             
     except Exception as e:
+        logging.error(f"Erreur lors du test d'email: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Erreur lors du test d'email: {str(e)}")
 
 # Movie suggestions endpoints
