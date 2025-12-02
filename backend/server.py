@@ -3716,7 +3716,9 @@ async def get_booking_details_from_schedules(
     """
     booking_date_str = booking_date.isoformat() if isinstance(booking_date, date) else str(booking_date)
     time_slot_str = time_slot.value if isinstance(time_slot, TimeSlot) else str(time_slot)
-    normalized_time_slot = normalize_time_slot_value(time_slot_str) if time_slot_str else None
+    normalized_time_slot_obj = normalize_time_slot_value(time_slot_str, allow_unknown=True) if time_slot_str else None
+    # Convertir en string pour la recherche MongoDB
+    normalized_time_slot = normalized_time_slot_obj.value if isinstance(normalized_time_slot_obj, TimeSlot) else (normalized_time_slot_obj if normalized_time_slot_obj else time_slot_str)
     
     logging.info(f"🔍 Recherche détails pour booking_date={booking_date_str}, time_slot={time_slot_str}, normalized={normalized_time_slot}, content_id={content_id}, content_type={content_type}")
     
@@ -3737,9 +3739,10 @@ async def get_booking_details_from_schedules(
                 logging.info(f"✅ Événement trouvé directement via content_id: {movie_title}")
     
     # Chercher dans content_schedules d'abord (nouveau système)
+    # Essayer avec le time_slot normalisé, puis avec l'original
     content_schedule = await db.content_schedules.find_one({
         "date": booking_date_str,
-        "time_slot": normalized_time_slot or time_slot_str,
+        "time_slot": {"$in": [normalized_time_slot, time_slot_str]},
         "is_active": True
     })
     
@@ -3767,13 +3770,13 @@ async def get_booking_details_from_schedules(
         
         # Si entry_time n'est pas dans content_schedule, chercher dans movie_schedules legacy
         if not entry_time:
-            movie_schedule = await db.movie_schedules.find_one({
+            movie_schedule_temp = await db.movie_schedules.find_one({
                 "date": booking_date_str,
-                "time_slot": normalized_time_slot or time_slot_str,
+                "time_slot": {"$in": [normalized_time_slot, time_slot_str]},
                 "is_active": True
             })
-            if movie_schedule:
-                entry_time = movie_schedule.get("entry_time")
+            if movie_schedule_temp:
+                entry_time = movie_schedule_temp.get("entry_time")
     else:
         logging.info(f"⚠️ Aucun content_schedule trouvé pour date={booking_date_str}, time_slot={normalized_time_slot or time_slot_str}")
     
@@ -3781,7 +3784,7 @@ async def get_booking_details_from_schedules(
     if not entry_time or not movie_title:
         movie_schedule = await db.movie_schedules.find_one({
             "date": booking_date_str,
-            "time_slot": normalized_time_slot or time_slot_str,
+            "time_slot": {"$in": [normalized_time_slot, time_slot_str]},
             "is_active": True
         })
         
@@ -3820,6 +3823,12 @@ async def get_booking_details_from_schedules(
     
     if not movie_title:
         logging.warning(f"❌ Aucun titre de film trouvé pour booking_date={booking_date_str}, time_slot={time_slot_str}")
+    
+    # S'assurer qu'entry_time est toujours renvoyé (même si c'est une valeur par défaut)
+    if not entry_time:
+        logging.warning(f"⚠️ entry_time non trouvé, utilisation d'une valeur par défaut basée sur time_slot={time_slot_str}")
+        # En dernier recours, utiliser le time_slot comme entry_time
+        entry_time = time_slot_str
     
     return {
         "entry_time": entry_time,
@@ -3998,6 +4007,10 @@ async def get_all_admin_bookings(admin = Depends(get_admin_user)):
             booking_dict = booking_obj.dict()
             booking_dict["entry_time"] = booking_details.get("entry_time")
             booking_dict["movie_title"] = booking_details.get("movie_title")
+            
+            # Log pour déboguer
+            if not booking_dict.get("movie_title"):
+                logging.warning(f"⚠️ Réservation {booking_obj.id} ({booking_obj.first_name} {booking_obj.last_name}) - Pas de titre trouvé. content_id={booking_obj.content_id}, content_type={booking_obj.content_type}, date={booking_obj.booking_date}, time_slot={booking_obj.time_slot}")
             
             enriched_bookings.append(booking_dict)
         

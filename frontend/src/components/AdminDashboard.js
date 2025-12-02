@@ -343,7 +343,7 @@ const AdminDashboard = ({ onLogout }) => {
                   <TableCell>{booking.first_name} {booking.last_name}</TableCell>
                   <TableCell>{format(new Date(booking.booking_date), 'PP', { locale: fr })}</TableCell>
                   <TableCell className="font-medium">{booking.movie_title || 'N/A'}</TableCell>
-                  <TableCell>{booking.entry_time || booking.time_slot}</TableCell>
+                  <TableCell>{booking.entry_time || 'N/A'}</TableCell>
                   <TableCell className="font-medium">{booking.nb_personne || 1}</TableCell>
                   <TableCell>{getStatusBadge(booking.status, booking.payment_status)}</TableCell>
                 </TableRow>
@@ -432,7 +432,7 @@ const AdminDashboard = ({ onLogout }) => {
                   <TableCell className="hidden sm:table-cell text-sm">{booking.email}</TableCell>
                   <TableCell className="text-sm">{format(new Date(booking.booking_date), 'PP', { locale: fr })}</TableCell>
                   <TableCell className="text-sm font-medium">{booking.movie_title || 'N/A'}</TableCell>
-                  <TableCell className="text-sm">{booking.entry_time || booking.time_slot || 'N/A'}</TableCell>
+                  <TableCell className="text-sm">{booking.entry_time || 'N/A'}</TableCell>
                   <TableCell className="text-sm font-medium">{booking.nb_personne || 1}</TableCell>
                   <TableCell>{getStatusBadge(booking.status, booking.payment_status)}</TableCell>
                   <TableCell>
