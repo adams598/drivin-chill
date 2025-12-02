@@ -2126,7 +2126,7 @@ function App() {
                                   schedule.schedule.start_time
                                     ? `Film à ${schedule.schedule.start_time}${
                                         schedule.schedule.end_time
-                                          ? ` (fin: ${schedule.schedule.end_time})`
+                                          ? ``
                                           : ""
                                       }`
                                     : isHalloween

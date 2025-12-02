@@ -509,7 +509,7 @@ class TicketBooking(BaseModel):
     phone: Optional[str] = None
     booking_date: date
     day_of_week: Union[DayOfWeek, str]  # Allow string for events
-    time_slot: Union[TimeSlot, str]     # Allow string for events
+    time_slot: Union[TimeSlot, str]     # Allow string for events - identifiant du créneau (21h15, 23h45)
     payment_method: PaymentMethod
     price: float = 17.0
     final_price: Optional[float] = None  # Price after promo code discount
@@ -524,6 +524,8 @@ class TicketBooking(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_cancelled: bool = False
     nb_personne: int = 1
+    content_type: Optional[str] = None  # 'movie' or 'event'
+    content_id: Optional[str] = None  # ID of the movie or event
 
 class TicketBookingCreate(BaseModel):
     first_name: str
@@ -1449,10 +1451,31 @@ async def create_booking(booking_data: TicketBookingCreate):
             logging.info(f"Exception 24h pour réservation gratuite: {booking_data.first_name} {booking_data.last_name} - Prix final: {final_price}€")
         
         # Create booking object
+        # Note: entry_time et movie_title ne sont PAS sauvegardés dans bookings
+        # Ils sont récupérés via jointures avec movie_schedules/content_schedules et movies
+        # Jointure: bookings (booking_date, time_slot) -> movie_schedules/content_schedules -> movies
         booking_dict = booking_data.dict()
         booking_dict["final_price"] = final_price
         if promo_discount_info:
             booking_dict["promo_discount_info"] = promo_discount_info
+        
+        # Sauvegarder entry_time et movie_title
+        booking_dict["entry_time"] = entry_time
+        booking_dict["movie_title"] = movie_title
+        
+        # Sauvegarder content_id et content_type si disponibles depuis le schedule trouvé
+        if content_schedule:
+            booking_dict["content_type"] = content_schedule.get("content_type", "movie")
+            booking_dict["content_id"] = content_schedule.get("content_id")
+        elif movie_schedule:
+            # Pour les movie_schedules legacy, c'est toujours un film
+            booking_dict["content_type"] = "movie"
+            booking_dict["content_id"] = movie_schedule.get("movie_id")
+        # Si booking_data contient déjà content_id et content_type, les garder
+        elif booking_data.content_id and booking_data.content_type:
+            booking_dict["content_type"] = booking_data.content_type
+            booking_dict["content_id"] = booking_data.content_id
+        
         booking_obj = TicketBooking(**booking_dict)
         
         # Generate QR code
@@ -3478,7 +3501,7 @@ async def get_popular_movies(genre: Optional[str] = None, year: Optional[int] = 
     """
     try:
         # TMDb API key (free tier - 1000 requests per day)
-        TMDB_API_KEY = "your_tmdb_api_key_here"  # You would need to get this from TMDb
+        TMDB_API_KEY = "bce281d3a24cbab349df1405e23e210a"  # You would need to get this from TMDb
         
         # For demo purposes, return static popular movies data
         # In production, you would make actual API calls to TMDb
@@ -3680,53 +3703,102 @@ async def reset_all_data(admin = Depends(get_admin_user)):
         logging.error(f"Error during data reset: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erreur lors de la réinitialisation: {str(e)}")
 
-# Helper function to get entry time for a booking
-async def get_entry_time_for_booking(booking_date: str, time_slot: str) -> Optional[str]:
-    """Récupère l'heure d'entrée pour une réservation donnée"""
-    try:
-        # Chercher dans content_schedules d'abord
-        content_schedule = await db.content_schedules.find_one({
-            "date": booking_date,
-            "time_slot": time_slot,
-            "is_active": True
-        })
+# Helper function to get booking details from related tables (JOIN)
+async def get_booking_details_from_schedules(booking_date: date, time_slot: Union[TimeSlot, str]) -> dict:
+    """
+    Récupère entry_time et movie_title depuis les tables liées via jointures
+    Jointure: bookings -> movie_schedules/content_schedules -> movies
+    Utilise booking_date et time_slot pour joindre avec movie_schedules/content_schedules
+    Puis utilise movie_id pour joindre avec movies et récupérer le title
+    """
+    booking_date_str = booking_date.isoformat() if isinstance(booking_date, date) else str(booking_date)
+    time_slot_str = time_slot.value if isinstance(time_slot, TimeSlot) else str(time_slot)
+    normalized_time_slot = normalize_time_slot_value(time_slot_str) if time_slot_str else None
+    
+    entry_time = None
+    movie_title = None
+    
+    # Chercher dans content_schedules d'abord (nouveau système)
+    content_schedule = await db.content_schedules.find_one({
+        "date": booking_date_str,
+        "time_slot": normalized_time_slot or time_slot_str,
+        "is_active": True
+    })
+    
+    if content_schedule:
+        # Récupérer entry_time depuis content_schedule
+        entry_time = content_schedule.get("entry_time")
         
-        if content_schedule:
-            # Pour content_schedules, chercher dans movie_schedules legacy pour l'entry_time
-            # ou utiliser TimeSlotSettings
+        # Récupérer le titre du film/événement via content_id
+        schedule_content_type = content_schedule.get("content_type", "movie")
+        schedule_content_id = content_schedule.get("content_id")
+        
+        if schedule_content_type == "movie" and schedule_content_id:
+            # Jointure avec movies via content_id
+            movie = await db.movies.find_one({"id": schedule_content_id, "is_active": True})
+            if movie:
+                movie_title = movie.get("title")
+        elif schedule_content_type == "event" and schedule_content_id:
+            # Jointure avec events via content_id
+            event = await db.events.find_one({"id": schedule_content_id, "is_active": True})
+            if event:
+                movie_title = event.get("title")
+        
+        # Si entry_time n'est pas dans content_schedule, chercher dans movie_schedules legacy
+        if not entry_time:
             movie_schedule = await db.movie_schedules.find_one({
-                "date": booking_date,
-                "time_slot": time_slot,
+                "date": booking_date_str,
+                "time_slot": normalized_time_slot or time_slot_str,
                 "is_active": True
             })
-            if movie_schedule and movie_schedule.get("entry_time"):
-                return movie_schedule.get("entry_time")
-        
-        # Chercher dans movie_schedules legacy
+            if movie_schedule:
+                entry_time = movie_schedule.get("entry_time")
+    
+    # Si pas trouvé dans content_schedules, chercher dans movie_schedules legacy
+    if not entry_time or not movie_title:
         movie_schedule = await db.movie_schedules.find_one({
-            "date": booking_date,
-            "time_slot": time_slot,
+            "date": booking_date_str,
+            "time_slot": normalized_time_slot or time_slot_str,
             "is_active": True
         })
         
-        if movie_schedule and movie_schedule.get("entry_time"):
-            return movie_schedule.get("entry_time")
-        
-        # Si pas trouvé, utiliser TimeSlotSettings pour calculer l'heure d'entrée par défaut
+        if movie_schedule:
+            # Récupérer entry_time depuis movie_schedule
+            if not entry_time:
+                entry_time = movie_schedule.get("entry_time")
+            
+            # Récupérer movie_title via movie_id (jointure avec movies)
+            if not movie_title:
+                movie_id = movie_schedule.get("movie_id")
+                if movie_id:
+                    movie = await db.movies.find_one({"id": movie_id, "is_active": True})
+                    if movie:
+                        movie_title = movie.get("title")
+    
+    # Si entry_time n'est toujours pas trouvé, utiliser TimeSlotSettings
+    if not entry_time:
         time_settings = await get_time_slot_settings()
+        time_slot_str_lower = str(time_slot_str).lower()
         
-        # Normaliser le time_slot pour la comparaison
-        time_slot_str = str(time_slot).lower()
-        
-        if time_slot_str == "21h15" or time_slot_str == time_settings.first_slot_value.lower():
-            return time_settings.first_slot_entry_time
-        elif time_slot_str == "23h45" or time_slot_str == time_settings.second_slot_value.lower():
-            return time_settings.second_slot_entry_time
-        elif time_slot_str == "01h30" or time_slot_str == time_settings.third_slot_value.lower():
-            return time_settings.third_slot_entry_time
-        
-        # Fallback par défaut
-        return None
+        if time_slot_str_lower == "21h15" or time_slot_str_lower == time_settings.first_slot_value.lower():
+            entry_time = time_settings.first_slot_entry_time
+        elif time_slot_str_lower == "23h45" or time_slot_str_lower == time_settings.second_slot_value.lower():
+            entry_time = time_settings.second_slot_entry_time
+        elif time_slot_str_lower == "01h30" or time_slot_str_lower == time_settings.third_slot_value.lower():
+            entry_time = time_settings.third_slot_entry_time
+    
+    return {
+        "entry_time": entry_time,
+        "movie_title": movie_title
+    }
+
+# Helper function to get entry time for a booking (kept for backward compatibility)
+async def get_entry_time_for_booking(booking_date: str, time_slot: str) -> Optional[str]:
+    """Récupère l'heure d'entrée pour une réservation donnée (legacy)"""
+    try:
+        booking_date_obj = date.fromisoformat(booking_date) if isinstance(booking_date, str) else booking_date
+        details = await get_booking_details_from_schedules(booking_date_obj, time_slot)
+        return details.get("entry_time")
     except Exception as e:
         logging.error(f"Erreur lors de la récupération de l'heure d'entrée: {str(e)}")
         return None
@@ -3827,69 +3899,17 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
             booking_parsed = parse_from_mongo(booking)
             booking_obj = TicketBooking(**booking_parsed)
             
-            # Récupérer l'heure d'entrée
-            booking_date_str = booking_obj.booking_date.isoformat() if isinstance(booking_obj.booking_date, date) else str(booking_obj.booking_date)
-            time_slot_str = booking_obj.time_slot.value if isinstance(booking_obj.time_slot, TimeSlot) else str(booking_obj.time_slot)
-            
-            entry_time = await get_entry_time_for_booking(booking_date_str, time_slot_str)
-            
-            # Récupérer le titre du film/événement
-            movie_title = None
-            content_type = booking_parsed.get("content_type")
-            content_id = booking_parsed.get("content_id")
-            
-            # Si content_id et content_type sont disponibles, utiliser ceux-ci
-            if content_id and content_type:
-                if content_type == "movie":
-                    movie = await db.movies.find_one({"id": content_id, "is_active": True})
-                    if movie:
-                        movie_title = movie.get("title")
-                elif content_type == "event":
-                    event = await db.events.find_one({"id": content_id, "is_active": True})
-                    if event:
-                        movie_title = event.get("title")
-            
-            # Sinon, chercher dans les schedules pour trouver le film correspondant
-            if not movie_title:
-                # Chercher dans content_schedules
-                content_schedule = await db.content_schedules.find_one({
-                    "date": booking_date_str,
-                    "time_slot": time_slot_str,
-                    "is_active": True
-                })
-                
-                if content_schedule:
-                    schedule_content_type = content_schedule.get("content_type", "movie")
-                    schedule_content_id = content_schedule.get("content_id")
-                    
-                    if schedule_content_type == "movie" and schedule_content_id:
-                        movie = await db.movies.find_one({"id": schedule_content_id, "is_active": True})
-                        if movie:
-                            movie_title = movie.get("title")
-                    elif schedule_content_type == "event" and schedule_content_id:
-                        event = await db.events.find_one({"id": schedule_content_id, "is_active": True})
-                        if event:
-                            movie_title = event.get("title")
-                
-                # Si toujours pas trouvé, chercher dans movie_schedules (legacy)
-                if not movie_title:
-                    movie_schedule = await db.movie_schedules.find_one({
-                        "date": booking_date_str,
-                        "time_slot": time_slot_str,
-                        "is_active": True
-                    })
-                    
-                    if movie_schedule:
-                        movie_id = movie_schedule.get("movie_id")
-                        if movie_id:
-                            movie = await db.movies.find_one({"id": movie_id, "is_active": True})
-                            if movie:
-                                movie_title = movie.get("title")
+            # Récupérer entry_time et movie_title via jointures avec movie_schedules/content_schedules et movies
+            # Jointure: bookings (booking_date, time_slot) -> movie_schedules/content_schedules -> movies
+            booking_details = await get_booking_details_from_schedules(
+                booking_obj.booking_date,
+                booking_obj.time_slot
+            )
             
             # Ajouter entry_time et movie_title au dictionnaire de réponse
             booking_dict = booking_obj.dict()
-            booking_dict["entry_time"] = entry_time
-            booking_dict["movie_title"] = movie_title
+            booking_dict["entry_time"] = booking_details.get("entry_time")
+            booking_dict["movie_title"] = booking_details.get("movie_title")
             
             enriched_recent_bookings.append(booking_dict)
         
@@ -3929,69 +3949,17 @@ async def get_all_admin_bookings(admin = Depends(get_admin_user)):
             booking_parsed = parse_from_mongo(booking)
             booking_obj = TicketBooking(**booking_parsed)
             
-            # Récupérer l'heure d'entrée
-            booking_date_str = booking_obj.booking_date.isoformat() if isinstance(booking_obj.booking_date, date) else str(booking_obj.booking_date)
-            time_slot_str = booking_obj.time_slot.value if isinstance(booking_obj.time_slot, TimeSlot) else str(booking_obj.time_slot)
-            
-            entry_time = await get_entry_time_for_booking(booking_date_str, time_slot_str)
-            
-            # Récupérer le titre du film/événement
-            movie_title = None
-            content_type = booking_parsed.get("content_type")
-            content_id = booking_parsed.get("content_id")
-            
-            # Si content_id et content_type sont disponibles, utiliser ceux-ci
-            if content_id and content_type:
-                if content_type == "movie":
-                    movie = await db.movies.find_one({"id": content_id, "is_active": True})
-                    if movie:
-                        movie_title = movie.get("title")
-                elif content_type == "event":
-                    event = await db.events.find_one({"id": content_id, "is_active": True})
-                    if event:
-                        movie_title = event.get("title")
-            
-            # Sinon, chercher dans les schedules pour trouver le film correspondant
-            if not movie_title:
-                # Chercher dans content_schedules
-                content_schedule = await db.content_schedules.find_one({
-                    "date": booking_date_str,
-                    "time_slot": time_slot_str,
-                    "is_active": True
-                })
-                
-                if content_schedule:
-                    schedule_content_type = content_schedule.get("content_type", "movie")
-                    schedule_content_id = content_schedule.get("content_id")
-                    
-                    if schedule_content_type == "movie" and schedule_content_id:
-                        movie = await db.movies.find_one({"id": schedule_content_id, "is_active": True})
-                        if movie:
-                            movie_title = movie.get("title")
-                    elif schedule_content_type == "event" and schedule_content_id:
-                        event = await db.events.find_one({"id": schedule_content_id, "is_active": True})
-                        if event:
-                            movie_title = event.get("title")
-                
-                # Si toujours pas trouvé, chercher dans movie_schedules (legacy)
-                if not movie_title:
-                    movie_schedule = await db.movie_schedules.find_one({
-                        "date": booking_date_str,
-                        "time_slot": time_slot_str,
-                        "is_active": True
-                    })
-                    
-                    if movie_schedule:
-                        movie_id = movie_schedule.get("movie_id")
-                        if movie_id:
-                            movie = await db.movies.find_one({"id": movie_id, "is_active": True})
-                            if movie:
-                                movie_title = movie.get("title")
+            # Récupérer entry_time et movie_title via jointures avec movie_schedules/content_schedules et movies
+            # Jointure: bookings (booking_date, time_slot) -> movie_schedules/content_schedules -> movies
+            booking_details = await get_booking_details_from_schedules(
+                booking_obj.booking_date,
+                booking_obj.time_slot
+            )
             
             # Ajouter entry_time et movie_title au dictionnaire de réponse
             booking_dict = booking_obj.dict()
-            booking_dict["entry_time"] = entry_time
-            booking_dict["movie_title"] = movie_title
+            booking_dict["entry_time"] = booking_details.get("entry_time")
+            booking_dict["movie_title"] = booking_details.get("movie_title")
             
             enriched_bookings.append(booking_dict)
         

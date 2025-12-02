@@ -75,8 +75,24 @@ const AdminDashboard = ({ onLogout }) => {
     setLoading(true);
     try {
       const response = await axios.get(`${API}/admin/bookings`, { headers: authHeaders });
+      console.log('📋 Réservations reçues:', response.data);
+      // Log pour la dernière réservation (celle de Tchatchoua ADAMS)
+      if (response.data && response.data.length > 0) {
+        const lastBooking = response.data[response.data.length - 1];
+        console.log('🔍 Dernière réservation:', {
+          id: lastBooking.id,
+          client: `${lastBooking.first_name} ${lastBooking.last_name}`,
+          date: lastBooking.booking_date,
+          time_slot: lastBooking.time_slot,
+          movie_title: lastBooking.movie_title,
+          content_id: lastBooking.content_id,
+          content_type: lastBooking.content_type,
+          entry_time: lastBooking.entry_time
+        });
+      }
       setBookings(response.data);
     } catch (error) {
+      console.error('❌ Erreur lors du chargement des réservations:', error);
       toast.error('Erreur lors du chargement des réservations');
     } finally {
       setLoading(false);
@@ -416,7 +432,7 @@ const AdminDashboard = ({ onLogout }) => {
                   <TableCell className="hidden sm:table-cell text-sm">{booking.email}</TableCell>
                   <TableCell className="text-sm">{format(new Date(booking.booking_date), 'PP', { locale: fr })}</TableCell>
                   <TableCell className="text-sm font-medium">{booking.movie_title || 'N/A'}</TableCell>
-                  <TableCell className="text-sm">{booking.entry_time || booking.time_slot}</TableCell>
+                  <TableCell className="text-sm">{booking.entry_time || booking.time_slot || 'N/A'}</TableCell>
                   <TableCell className="text-sm font-medium">{booking.nb_personne || 1}</TableCell>
                   <TableCell>{getStatusBadge(booking.status, booking.payment_status)}</TableCell>
                   <TableCell>
