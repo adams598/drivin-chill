@@ -1,0 +1,20 @@
+name: Preprod Deployment Check
+
+on:
+  push:
+    branches:
+      - develop
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check deployment
+        run: |
+          echo "✅ Déploiement PREPROD déclenché sur la branche develop"
+          echo "🔍 Vérifiez le déploiement sur Vercel"
+          echo "📋 Une fois validé, promouvez vers production via l'interface Vercel"
+

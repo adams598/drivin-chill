@@ -1459,10 +1459,6 @@ async def create_booking(booking_data: TicketBookingCreate):
         if promo_discount_info:
             booking_dict["promo_discount_info"] = promo_discount_info
         
-        # Sauvegarder entry_time et movie_title
-        booking_dict["entry_time"] = entry_time
-        booking_dict["movie_title"] = movie_title
-        
         # Sauvegarder content_id et content_type si disponibles depuis le schedule trouvé
         if content_schedule:
             booking_dict["content_type"] = content_schedule.get("content_type", "movie")
