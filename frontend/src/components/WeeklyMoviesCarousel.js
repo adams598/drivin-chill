@@ -347,9 +347,7 @@ const WeeklyMoviesCarousel = ({ onMovieSelect, timeSlotSettings }) => {
                               currentItem.schedule.start_time
                             )}${
                               currentItem.schedule.end_time
-                                ? ` (fin: ${formatTimeToHHmm(
-                                    currentItem.schedule.end_time
-                                  )})`
+                                ? ``
                                 : ""
                             }`
                           : currentItem.schedule.time_slot === "21h15" ||
