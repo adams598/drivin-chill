@@ -430,6 +430,9 @@ class ContentSchedule(BaseModel):
     time_slot: TimeSlot  # For movies: standard slots (21h15, 23h45)
     custom_time: Optional[str] = None  # For events: custom time (e.g., "19h30")
     capacity: int = 21  # Customizable capacity per schedule (default 21)
+    entry_time: Optional[str] = None  # Heure d'entrée (ex: "20h45" ou "20:45")
+    start_time: Optional[str] = None  # Heure de début du film (ex: "21h00" ou "21:00")
+    end_time: Optional[str] = None  # Heure de fin du film (ex: "23h00" ou "23:00")
     is_active: bool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -444,6 +447,9 @@ class ContentScheduleCreate(BaseModel):
     time_slot: TimeSlot  # For movies: required, for events: can be placeholder
     custom_time: Optional[str] = None  # For events: custom time format (e.g., "19h30")
     capacity: int = 21  # Default capacity, can be customized
+    entry_time: Optional[str] = None  # Heure d'entrée (ex: "20h45" ou "20:45")
+    start_time: Optional[str] = None  # Heure de début du film (ex: "21h00" ou "21:00")
+    end_time: Optional[str] = None  # Heure de fin du film (ex: "23h00" ou "23:00")
 
     @validator("time_slot", pre=True)
     def _normalize_time_slot(cls, value):
@@ -2354,6 +2360,27 @@ async def get_content_schedules(date_from: Optional[str] = None, date_to: Option
         for schedule in schedules:
             parsed_schedule = parse_from_mongo(schedule)
             
+            # Enrichir avec les horaires depuis movie_schedules si disponibles
+            schedule_date_str = parsed_schedule["date"].isoformat() if isinstance(parsed_schedule["date"], date) else str(parsed_schedule["date"])
+            time_slot_str = parsed_schedule["time_slot"].value if isinstance(parsed_schedule["time_slot"], TimeSlot) else str(parsed_schedule["time_slot"])
+            
+            # Chercher les horaires dans movie_schedules correspondants
+            movie_schedule = await db.movie_schedules.find_one({
+                "date": schedule_date_str,
+                "time_slot": time_slot_str,
+                "is_active": True
+            })
+            
+            if movie_schedule:
+                parsed_movie_schedule = parse_from_mongo(movie_schedule)
+                # Ajouter les horaires au schedule
+                if parsed_movie_schedule.get("entry_time"):
+                    parsed_schedule["entry_time"] = parsed_movie_schedule["entry_time"]
+                if parsed_movie_schedule.get("start_time"):
+                    parsed_schedule["start_time"] = parsed_movie_schedule["start_time"]
+                if parsed_movie_schedule.get("end_time"):
+                    parsed_schedule["end_time"] = parsed_movie_schedule["end_time"]
+            
             if parsed_schedule["content_type"] == "movie":
                 content = await db.movies.find_one({"id": parsed_schedule["content_id"]})
                 if content:
@@ -2442,6 +2469,27 @@ async def get_weekly_schedule():
             for schedule in content_schedules:
                 parsed_schedule = parse_from_mongo(schedule)
                 
+                # Enrichir avec les horaires depuis movie_schedules si disponibles
+                schedule_date_str = parsed_schedule["date"].isoformat() if isinstance(parsed_schedule["date"], date) else str(parsed_schedule["date"])
+                time_slot_str = parsed_schedule["time_slot"].value if isinstance(parsed_schedule["time_slot"], TimeSlot) else str(parsed_schedule["time_slot"])
+                
+                # Chercher les horaires dans movie_schedules correspondants
+                movie_schedule = await db.movie_schedules.find_one({
+                    "date": schedule_date_str,
+                    "time_slot": time_slot_str,
+                    "is_active": True
+                })
+                
+                if movie_schedule:
+                    parsed_movie_schedule = parse_from_mongo(movie_schedule)
+                    # Ajouter les horaires au schedule
+                    if parsed_movie_schedule.get("entry_time"):
+                        parsed_schedule["entry_time"] = parsed_movie_schedule["entry_time"]
+                    if parsed_movie_schedule.get("start_time"):
+                        parsed_schedule["start_time"] = parsed_movie_schedule["start_time"]
+                    if parsed_movie_schedule.get("end_time"):
+                        parsed_schedule["end_time"] = parsed_movie_schedule["end_time"]
+                
                 if parsed_schedule["content_type"] == "movie":
                     content = await db.movies.find_one({"id": parsed_schedule["content_id"], "is_active": True})
                     if content:
@@ -2464,6 +2512,7 @@ async def get_weekly_schedule():
                     movie = await db.movies.find_one({"id": parsed_schedule["movie_id"], "is_active": True})
                     if movie:
                         # Convert legacy movie schedule to content schedule format
+                        # Inclure les horaires entry_time, start_time, end_time
                         content_schedule = ContentSchedule(
                             id=parsed_schedule["id"],
                             content_id=parsed_schedule["movie_id"],
@@ -2471,6 +2520,9 @@ async def get_weekly_schedule():
                             date=parsed_schedule["date"],
                             time_slot=parsed_schedule["time_slot"],
                             capacity=parsed_schedule.get("capacity", 21),
+                            entry_time=parsed_schedule.get("entry_time"),
+                            start_time=parsed_schedule.get("start_time"),
+                            end_time=parsed_schedule.get("end_time"),
                             is_active=parsed_schedule["is_active"],
                             created_at=parsed_schedule["created_at"]
                         )
