@@ -832,7 +832,9 @@ function App() {
     if (formData.nbPersonne === "more") {
       const customNb = parseInt(formData.nbPersonneCustom);
       if (!formData.nbPersonneCustom || isNaN(customNb) || customNb < 6) {
-        toast.error("Veuillez indiquer un nombre de personnes valide (minimum 6)");
+        toast.error(
+          "Veuillez indiquer un nombre de personnes valide (minimum 6)"
+        );
         return;
       }
     }
@@ -848,9 +850,10 @@ function App() {
 
     try {
       // Calculate number of people
-      const nbPersonne = formData.nbPersonne === "more" 
-        ? parseInt(formData.nbPersonneCustom) 
-        : parseInt(formData.nbPersonne);
+      const nbPersonne =
+        formData.nbPersonne === "more"
+          ? parseInt(formData.nbPersonneCustom)
+          : parseInt(formData.nbPersonne);
 
       // First create the booking
       const bookingData = {
@@ -1593,10 +1596,6 @@ function App() {
           {/* Schedule Section */}
           <div className="py-20 bg-gray-900">
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-              <h2 className="text-4xl font-bold text-center text-white mb-16 font-serif">
-                Nos créneaux
-              </h2>
-
               {/* Debug: Afficher les horaires chargés */}
               {process.env.NODE_ENV === "development" && timeSlotSettings && (
                 <div className="mb-4 p-2 bg-blue-900 rounded text-xs text-blue-200 text-center">
@@ -1608,7 +1607,7 @@ function App() {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <Card className="bg-orange-800 border-orange-600 hover:bg-orange-700 transition-all duration-300">
                   <CardHeader className="text-center">
                     <Clock className="mx-auto h-12 w-12 text-orange-200 mb-4" />
@@ -1656,7 +1655,7 @@ function App() {
                     )}
                   </CardContent>
                 </Card>
-              </div>
+              </div>  */}
 
               <p className="text-center text-gray-300 mt-8 text-lg">
                 Les séances peuvent se dérouler{" "}

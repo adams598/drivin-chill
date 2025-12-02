@@ -23,6 +23,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 import aiosmtplib
+import httpx
 
 ROOT_DIR = Path(__file__).parent
 env_path = ROOT_DIR / '.env'
@@ -2667,6 +2668,80 @@ async def get_public_address():
             longitude=1.2611
         )
 
+@api_router.get("/admin/geocode")
+async def geocode_address(address: str = Query(..., description="Adresse à géocoder"), admin = Depends(get_admin_user)):
+    """Géocode une adresse en utilisant l'API Nominatim d'OpenStreetMap"""
+    try:
+        if not address or address.strip() == "":
+            raise HTTPException(status_code=400, detail="L'adresse ne peut pas être vide")
+        
+        # Préparer l'adresse pour le géocodage (ajouter "France" si pas présent)
+        search_address = address.strip()
+        if "france" not in search_address.lower() and "fr" not in search_address.lower():
+            search_address = f"{search_address}, France"
+        
+        # Utiliser httpx pour faire la requête (peut définir User-Agent)
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Ajouter un petit délai pour respecter les limites de l'API (1 requête/seconde)
+            await asyncio.sleep(1)
+            
+            response = await client.get(
+                "https://nominatim.openstreetmap.org/search",
+                params={
+                    "q": search_address,
+                    "format": "json",
+                    "limit": 5,
+                    "addressdetails": 1,
+                    "countrycodes": "fr",
+                },
+                headers={
+                    "User-Agent": "DrivinAndChill/1.0 (Contact: admin@drivinnchill.com)",
+                    "Accept-Language": "fr-FR,fr;q=0.9",
+                },
+            )
+            
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Erreur lors de l'appel à l'API de géocodage: {response.status_code}"
+                )
+            
+            data = response.json()
+            
+            if not data or len(data) == 0:
+                return {
+                    "success": False,
+                    "message": "Aucun résultat trouvé pour cette adresse",
+                    "latitude": None,
+                    "longitude": None,
+                }
+            
+            # Prendre le premier résultat (le plus pertinent)
+            result = data[0]
+            lat = float(result.get("lat", 0))
+            lon = float(result.get("lon", 0))
+            
+            # Vérifier que les coordonnées sont valides
+            if lat == 0 or lon == 0 or (lat < 41 or lat > 51 or lon < -5 or lon > 10):
+                logging.warning(f"Coordonnées suspectes reçues: {lat}, {lon} pour l'adresse: {search_address}")
+            
+            return {
+                "success": True,
+                "latitude": lat,
+                "longitude": lon,
+                "display_name": result.get("display_name", ""),
+                "address": search_address,
+            }
+            
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Timeout lors de la requête de géocodage")
+    except httpx.RequestError as e:
+        logging.error(f"Erreur de requête lors du géocodage: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la requête de géocodage: {str(e)}")
+    except Exception as e:
+        logging.error(f"Erreur lors du géocodage: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erreur lors du géocodage: {str(e)}")
+
 @api_router.get("/admin/email-status")
 async def get_email_status(admin = Depends(get_admin_user)):
     """Get email configuration status"""
@@ -3553,6 +3628,57 @@ async def reset_all_data(admin = Depends(get_admin_user)):
         logging.error(f"Error during data reset: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erreur lors de la réinitialisation: {str(e)}")
 
+# Helper function to get entry time for a booking
+async def get_entry_time_for_booking(booking_date: str, time_slot: str) -> Optional[str]:
+    """Récupère l'heure d'entrée pour une réservation donnée"""
+    try:
+        # Chercher dans content_schedules d'abord
+        content_schedule = await db.content_schedules.find_one({
+            "date": booking_date,
+            "time_slot": time_slot,
+            "is_active": True
+        })
+        
+        if content_schedule:
+            # Pour content_schedules, chercher dans movie_schedules legacy pour l'entry_time
+            # ou utiliser TimeSlotSettings
+            movie_schedule = await db.movie_schedules.find_one({
+                "date": booking_date,
+                "time_slot": time_slot,
+                "is_active": True
+            })
+            if movie_schedule and movie_schedule.get("entry_time"):
+                return movie_schedule.get("entry_time")
+        
+        # Chercher dans movie_schedules legacy
+        movie_schedule = await db.movie_schedules.find_one({
+            "date": booking_date,
+            "time_slot": time_slot,
+            "is_active": True
+        })
+        
+        if movie_schedule and movie_schedule.get("entry_time"):
+            return movie_schedule.get("entry_time")
+        
+        # Si pas trouvé, utiliser TimeSlotSettings pour calculer l'heure d'entrée par défaut
+        time_settings = await get_time_slot_settings()
+        
+        # Normaliser le time_slot pour la comparaison
+        time_slot_str = str(time_slot).lower()
+        
+        if time_slot_str == "21h15" or time_slot_str == time_settings.first_slot_value.lower():
+            return time_settings.first_slot_entry_time
+        elif time_slot_str == "23h45" or time_slot_str == time_settings.second_slot_value.lower():
+            return time_settings.second_slot_entry_time
+        elif time_slot_str == "01h30" or time_slot_str == time_settings.third_slot_value.lower():
+            return time_settings.third_slot_entry_time
+        
+        # Fallback par défaut
+        return None
+    except Exception as e:
+        logging.error(f"Erreur lors de la récupération de l'heure d'entrée: {str(e)}")
+        return None
+
 # Admin endpoints
 @api_router.get("/admin/dashboard")
 async def get_admin_dashboard(admin = Depends(get_admin_user)):
@@ -3643,6 +3769,24 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
             limit=10
         ).to_list(10)
         
+        # Enrichir les réservations récentes avec l'heure d'entrée
+        enriched_recent_bookings = []
+        for booking in recent_bookings:
+            booking_parsed = parse_from_mongo(booking)
+            booking_obj = TicketBooking(**booking_parsed)
+            
+            # Récupérer l'heure d'entrée
+            booking_date_str = booking_obj.booking_date.isoformat() if isinstance(booking_obj.booking_date, date) else str(booking_obj.booking_date)
+            time_slot_str = booking_obj.time_slot.value if isinstance(booking_obj.time_slot, TimeSlot) else str(booking_obj.time_slot)
+            
+            entry_time = await get_entry_time_for_booking(booking_date_str, time_slot_str)
+            
+            # Ajouter entry_time au dictionnaire de réponse
+            booking_dict = booking_obj.dict()
+            booking_dict["entry_time"] = entry_time
+            
+            enriched_recent_bookings.append(booking_dict)
+        
         return {
             "statistics": {
                 "total_bookings": total_bookings,
@@ -3663,7 +3807,7 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
                     "utilization_percentage": round(occupancy_rate, 1)
                 }
             },
-            "recent_bookings": [TicketBooking(**parse_from_mongo(booking)) for booking in recent_bookings]
+            "recent_bookings": enriched_recent_bookings
         }
         
     except Exception as e:
@@ -3673,7 +3817,25 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
 async def get_all_admin_bookings(admin = Depends(get_admin_user)):
     try:
         bookings = await db.bookings.find().to_list(1000)
-        return [TicketBooking(**parse_from_mongo(booking)) for booking in bookings]
+        enriched_bookings = []
+        
+        for booking in bookings:
+            booking_parsed = parse_from_mongo(booking)
+            booking_obj = TicketBooking(**booking_parsed)
+            
+            # Récupérer l'heure d'entrée
+            booking_date_str = booking_obj.booking_date.isoformat() if isinstance(booking_obj.booking_date, date) else str(booking_obj.booking_date)
+            time_slot_str = booking_obj.time_slot.value if isinstance(booking_obj.time_slot, TimeSlot) else str(booking_obj.time_slot)
+            
+            entry_time = await get_entry_time_for_booking(booking_date_str, time_slot_str)
+            
+            # Ajouter entry_time au dictionnaire de réponse
+            booking_dict = booking_obj.dict()
+            booking_dict["entry_time"] = entry_time
+            
+            enriched_bookings.append(booking_dict)
+        
+        return enriched_bookings
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des réservations: {str(e)}")
 

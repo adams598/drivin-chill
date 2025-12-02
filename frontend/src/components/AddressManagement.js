@@ -102,6 +102,7 @@ const AddressManagement = () => {
   };
 
   // Fonction pour géocoder une adresse (convertir en coordonnées GPS)
+  // Utilise maintenant l'endpoint backend pour éviter les problèmes de User-Agent
   const geocodeAddress = async (address) => {
     if (!address || address.trim() === "") {
       return null;
@@ -109,32 +110,46 @@ const AddressManagement = () => {
 
     setGeocoding(true);
     try {
-      // Utilisation de l'API Nominatim d'OpenStreetMap (gratuite, sans clé API)
-      const response = await axios.get(
-        `https://nominatim.openstreetmap.org/search`,
-        {
-          params: {
-            q: address,
-            format: "json",
-            limit: 1,
-            addressdetails: 1,
-          },
-          headers: {
-            "User-Agent": "DrivinAndChill/1.0", // Requis par Nominatim
-          },
-        }
-      );
+      // Utiliser l'endpoint backend pour le géocodage
+      const response = await axios.get(`${API}/admin/geocode`, {
+        params: {
+          address: address.trim(),
+        },
+        headers: authHeaders,
+      });
 
-      if (response.data && response.data.length > 0) {
-        const result = response.data[0];
+      if (response.data && response.data.success) {
+        const { latitude, longitude, display_name } = response.data;
+        
+        // Vérifier que les coordonnées sont valides
+        if (isNaN(latitude) || isNaN(longitude)) {
+          console.error("Coordonnées invalides reçues:", response.data);
+          return null;
+        }
+        
+        console.log("📍 Géocodage réussi:", {
+          address: address.trim(),
+          coordinates: { latitude, longitude },
+          display_name: display_name,
+        });
+        
         return {
-          latitude: parseFloat(result.lat),
-          longitude: parseFloat(result.lon),
+          latitude: latitude,
+          longitude: longitude,
         };
       }
+      
+      console.warn("Aucun résultat de géocodage pour:", address);
       return null;
     } catch (error) {
       console.error("Erreur lors du géocodage:", error);
+      if (error.response) {
+        console.error("Réponse d'erreur:", error.response.status, error.response.data);
+        const errorMessage = error.response.data?.detail || error.response.data?.message || "Erreur lors du géocodage";
+        toast.error(`❌ ${errorMessage}`, { duration: 5000 });
+      } else {
+        toast.error("❌ Erreur de connexion lors du géocodage", { duration: 5000 });
+      }
       return null;
     } finally {
       setGeocoding(false);
@@ -487,6 +502,100 @@ const AddressManagement = () => {
                 complète
               </li>
             </ul>
+          </div>
+
+          {/* GPS Coordinates Configuration */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-white text-lg font-medium flex items-center">
+                🌍 Coordonnées GPS (pour la carte)
+              </h3>
+              <Button
+                type="button"
+                onClick={async () => {
+                  const addressToGeocode = formData.full_address || formData.address_text;
+                  if (!addressToGeocode || addressToGeocode.trim() === "") {
+                    toast.error("Veuillez d'abord saisir une adresse");
+                    return;
+                  }
+                  toast.info("📍 Recherche des coordonnées GPS...", { duration: 2000 });
+                  const coords = await geocodeAddress(addressToGeocode);
+                  if (coords) {
+                    setFormData((prev) => ({
+                      ...prev,
+                      latitude: coords.latitude.toFixed(6),
+                      longitude: coords.longitude.toFixed(6),
+                    }));
+                    toast.success(
+                      `📍 Coordonnées trouvées : ${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`,
+                      { duration: 4000 }
+                    );
+                  } else {
+                    toast.error(
+                      "❌ Impossible de trouver les coordonnées. Vérifiez l'adresse ou saisissez-les manuellement.",
+                      { duration: 5000 }
+                    );
+                  }
+                }}
+                variant="outline"
+                className="bg-blue-600 hover:bg-blue-700 text-white border-blue-500"
+                disabled={geocoding}
+              >
+                <MapPin className="mr-2 h-4 w-4" />
+                {geocoding ? "Recherche..." : "Trouver les coordonnées"}
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-white">Latitude *</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={formData.latitude}
+                  onChange={(e) =>
+                    handleInputChange("latitude", e.target.value)
+                  }
+                  placeholder="45.8336"
+                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                  required
+                />
+                <p className="text-xs text-gray-400">
+                  Coordonnée GPS latitude (ex: 45.8336)
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-white">Longitude *</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={formData.longitude}
+                  onChange={(e) =>
+                    handleInputChange("longitude", e.target.value)
+                  }
+                  placeholder="1.2611"
+                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                  required
+                />
+                <p className="text-xs text-gray-400">
+                  Coordonnée GPS longitude (ex: 1.2611)
+                </p>
+              </div>
+            </div>
+            {formData.latitude && formData.longitude && (
+              <div className="bg-blue-900 border border-blue-600 rounded-lg p-3">
+                <p className="text-blue-100 text-sm">
+                  📍 Coordonnées actuelles :{" "}
+                  <strong>
+                    {parseFloat(formData.latitude).toFixed(6)},{" "}
+                    {parseFloat(formData.longitude).toFixed(6)}
+                  </strong>
+                </p>
+                <p className="text-blue-200 text-xs mt-1">
+                  Vérifiez que ces coordonnées correspondent bien à l'adresse
+                  indiquée. Vous pouvez les corriger manuellement si nécessaire.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}

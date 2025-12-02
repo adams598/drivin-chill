@@ -325,7 +325,7 @@ const AdminDashboard = ({ onLogout }) => {
                 <TableRow key={booking.id}>
                   <TableCell>{booking.first_name} {booking.last_name}</TableCell>
                   <TableCell>{format(new Date(booking.booking_date), 'PP', { locale: fr })}</TableCell>
-                  <TableCell>{booking.time_slot}</TableCell>
+                  <TableCell>{booking.entry_time || booking.time_slot}</TableCell>
                   <TableCell className="font-medium">{booking.nb_personne || 1}</TableCell>
                   <TableCell>{getStatusBadge(booking.status, booking.payment_status)}</TableCell>
                 </TableRow>
@@ -412,7 +412,7 @@ const AdminDashboard = ({ onLogout }) => {
                   <TableCell className="font-medium">{booking.first_name} {booking.last_name}</TableCell>
                   <TableCell className="hidden sm:table-cell text-sm">{booking.email}</TableCell>
                   <TableCell className="text-sm">{format(new Date(booking.booking_date), 'PP', { locale: fr })}</TableCell>
-                  <TableCell className="text-sm">{booking.time_slot}</TableCell>
+                  <TableCell className="text-sm">{booking.entry_time || booking.time_slot}</TableCell>
                   <TableCell className="text-sm font-medium">{booking.nb_personne || 1}</TableCell>
                   <TableCell>{getStatusBadge(booking.status, booking.payment_status)}</TableCell>
                   <TableCell>

@@ -40,6 +40,32 @@ module.exports = {
         };
       }
       
+      // Ignore source map warnings from node_modules
+      if (webpackConfig.module && webpackConfig.module.rules) {
+        webpackConfig.module.rules.forEach((rule) => {
+          if (rule.use) {
+            rule.use.forEach((use) => {
+              if (use.loader && use.loader.includes('source-map-loader')) {
+                use.options = {
+                  ...use.options,
+                  filterSourceMappingUrl: () => false,
+                };
+              }
+            });
+          }
+        });
+      }
+      
+      // Alternative: Filter out source-map-loader warnings
+      if (webpackConfig.ignoreWarnings) {
+        webpackConfig.ignoreWarnings = [
+          ...webpackConfig.ignoreWarnings,
+          /Failed to parse source map/,
+        ];
+      } else {
+        webpackConfig.ignoreWarnings = [/Failed to parse source map/];
+      }
+      
       return webpackConfig;
     },
   },
