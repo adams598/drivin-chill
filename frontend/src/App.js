@@ -58,7 +58,7 @@ import {
 } from "lucide-react";
 import { format, addDays, isAfter, isBefore, startOfDay } from "date-fns";
 import { fr } from "date-fns/locale";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import icon from "leaflet/dist/images/marker-icon.png";
@@ -77,6 +77,17 @@ let DefaultIcon = L.icon({
   shadowSize: [41, 41],
 });
 L.Marker.prototype.options.icon = DefaultIcon;
+
+// Composant pour centrer automatiquement la carte sur les coordonnées
+function MapCenter({ center, zoom }) {
+  const map = useMap();
+  useEffect(() => {
+    if (center && center[0] && center[1]) {
+      map.setView(center, zoom);
+    }
+  }, [center, zoom, map]);
+  return null;
+}
 
 // Import new components
 import QRCodeGenerator from "./components/QRCodeGenerator";
@@ -1709,13 +1720,28 @@ function App() {
                       ? [addressSettings.latitude, addressSettings.longitude]
                       : [45.8336, 1.2611]
                   }
-                  zoom={15}
+                  zoom={17}
                   style={{ height: "400px", width: "100%", zIndex: 0 }}
                   scrollWheelZoom={true}
+                  whenCreated={(mapInstance) => {
+                    // Forcer le centrage immédiatement à la création
+                    const center = addressSettings
+                      ? [addressSettings.latitude, addressSettings.longitude]
+                      : [45.8336, 1.2611];
+                    mapInstance.setView(center, 17);
+                  }}
                 >
                   <TileLayer
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <MapCenter
+                    center={
+                      addressSettings
+                        ? [addressSettings.latitude, addressSettings.longitude]
+                        : [45.8336, 1.2611]
+                    }
+                    zoom={17}
                   />
                   <Marker
                     position={
