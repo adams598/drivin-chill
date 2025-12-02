@@ -3821,7 +3821,7 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
             limit=10
         ).to_list(10)
         
-        # Enrichir les réservations récentes avec l'heure d'entrée
+        # Enrichir les réservations récentes avec l'heure d'entrée et le titre du film
         enriched_recent_bookings = []
         for booking in recent_bookings:
             booking_parsed = parse_from_mongo(booking)
@@ -3833,9 +3833,63 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
             
             entry_time = await get_entry_time_for_booking(booking_date_str, time_slot_str)
             
-            # Ajouter entry_time au dictionnaire de réponse
+            # Récupérer le titre du film/événement
+            movie_title = None
+            content_type = booking_parsed.get("content_type")
+            content_id = booking_parsed.get("content_id")
+            
+            # Si content_id et content_type sont disponibles, utiliser ceux-ci
+            if content_id and content_type:
+                if content_type == "movie":
+                    movie = await db.movies.find_one({"id": content_id, "is_active": True})
+                    if movie:
+                        movie_title = movie.get("title")
+                elif content_type == "event":
+                    event = await db.events.find_one({"id": content_id, "is_active": True})
+                    if event:
+                        movie_title = event.get("title")
+            
+            # Sinon, chercher dans les schedules pour trouver le film correspondant
+            if not movie_title:
+                # Chercher dans content_schedules
+                content_schedule = await db.content_schedules.find_one({
+                    "date": booking_date_str,
+                    "time_slot": time_slot_str,
+                    "is_active": True
+                })
+                
+                if content_schedule:
+                    schedule_content_type = content_schedule.get("content_type", "movie")
+                    schedule_content_id = content_schedule.get("content_id")
+                    
+                    if schedule_content_type == "movie" and schedule_content_id:
+                        movie = await db.movies.find_one({"id": schedule_content_id, "is_active": True})
+                        if movie:
+                            movie_title = movie.get("title")
+                    elif schedule_content_type == "event" and schedule_content_id:
+                        event = await db.events.find_one({"id": schedule_content_id, "is_active": True})
+                        if event:
+                            movie_title = event.get("title")
+                
+                # Si toujours pas trouvé, chercher dans movie_schedules (legacy)
+                if not movie_title:
+                    movie_schedule = await db.movie_schedules.find_one({
+                        "date": booking_date_str,
+                        "time_slot": time_slot_str,
+                        "is_active": True
+                    })
+                    
+                    if movie_schedule:
+                        movie_id = movie_schedule.get("movie_id")
+                        if movie_id:
+                            movie = await db.movies.find_one({"id": movie_id, "is_active": True})
+                            if movie:
+                                movie_title = movie.get("title")
+            
+            # Ajouter entry_time et movie_title au dictionnaire de réponse
             booking_dict = booking_obj.dict()
             booking_dict["entry_time"] = entry_time
+            booking_dict["movie_title"] = movie_title
             
             enriched_recent_bookings.append(booking_dict)
         
@@ -3881,9 +3935,63 @@ async def get_all_admin_bookings(admin = Depends(get_admin_user)):
             
             entry_time = await get_entry_time_for_booking(booking_date_str, time_slot_str)
             
-            # Ajouter entry_time au dictionnaire de réponse
+            # Récupérer le titre du film/événement
+            movie_title = None
+            content_type = booking_parsed.get("content_type")
+            content_id = booking_parsed.get("content_id")
+            
+            # Si content_id et content_type sont disponibles, utiliser ceux-ci
+            if content_id and content_type:
+                if content_type == "movie":
+                    movie = await db.movies.find_one({"id": content_id, "is_active": True})
+                    if movie:
+                        movie_title = movie.get("title")
+                elif content_type == "event":
+                    event = await db.events.find_one({"id": content_id, "is_active": True})
+                    if event:
+                        movie_title = event.get("title")
+            
+            # Sinon, chercher dans les schedules pour trouver le film correspondant
+            if not movie_title:
+                # Chercher dans content_schedules
+                content_schedule = await db.content_schedules.find_one({
+                    "date": booking_date_str,
+                    "time_slot": time_slot_str,
+                    "is_active": True
+                })
+                
+                if content_schedule:
+                    schedule_content_type = content_schedule.get("content_type", "movie")
+                    schedule_content_id = content_schedule.get("content_id")
+                    
+                    if schedule_content_type == "movie" and schedule_content_id:
+                        movie = await db.movies.find_one({"id": schedule_content_id, "is_active": True})
+                        if movie:
+                            movie_title = movie.get("title")
+                    elif schedule_content_type == "event" and schedule_content_id:
+                        event = await db.events.find_one({"id": schedule_content_id, "is_active": True})
+                        if event:
+                            movie_title = event.get("title")
+                
+                # Si toujours pas trouvé, chercher dans movie_schedules (legacy)
+                if not movie_title:
+                    movie_schedule = await db.movie_schedules.find_one({
+                        "date": booking_date_str,
+                        "time_slot": time_slot_str,
+                        "is_active": True
+                    })
+                    
+                    if movie_schedule:
+                        movie_id = movie_schedule.get("movie_id")
+                        if movie_id:
+                            movie = await db.movies.find_one({"id": movie_id, "is_active": True})
+                            if movie:
+                                movie_title = movie.get("title")
+            
+            # Ajouter entry_time et movie_title au dictionnaire de réponse
             booking_dict = booking_obj.dict()
             booking_dict["entry_time"] = entry_time
+            booking_dict["movie_title"] = movie_title
             
             enriched_bookings.append(booking_dict)
         

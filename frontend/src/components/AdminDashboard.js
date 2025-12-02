@@ -315,6 +315,7 @@ const AdminDashboard = ({ onLogout }) => {
                 <TableRow>
                   <TableHead className="min-w-[120px]">Client</TableHead>
                   <TableHead className="min-w-[100px]">Date</TableHead>
+                  <TableHead className="min-w-[150px]">Film</TableHead>
                   <TableHead className="min-w-[80px]">Créneau</TableHead>
                   <TableHead className="min-w-[100px]">Nb. personnes</TableHead>
                   <TableHead className="min-w-[100px]">Statut</TableHead>
@@ -325,6 +326,7 @@ const AdminDashboard = ({ onLogout }) => {
                 <TableRow key={booking.id}>
                   <TableCell>{booking.first_name} {booking.last_name}</TableCell>
                   <TableCell>{format(new Date(booking.booking_date), 'PP', { locale: fr })}</TableCell>
+                  <TableCell className="font-medium">{booking.movie_title || 'N/A'}</TableCell>
                   <TableCell>{booking.entry_time || booking.time_slot}</TableCell>
                   <TableCell className="font-medium">{booking.nb_personne || 1}</TableCell>
                   <TableCell>{getStatusBadge(booking.status, booking.payment_status)}</TableCell>
@@ -399,6 +401,7 @@ const AdminDashboard = ({ onLogout }) => {
                   <TableHead className="min-w-[120px]">Client</TableHead>
                   <TableHead className="min-w-[150px] hidden sm:table-cell">Email</TableHead>
                   <TableHead className="min-w-[100px]">Date</TableHead>
+                  <TableHead className="min-w-[150px]">Film</TableHead>
                   <TableHead className="min-w-[80px]">Créneau</TableHead>
                   <TableHead className="min-w-[100px]">Nb. personnes</TableHead>
                   <TableHead className="min-w-[100px]">Statut</TableHead>
@@ -412,6 +415,7 @@ const AdminDashboard = ({ onLogout }) => {
                   <TableCell className="font-medium">{booking.first_name} {booking.last_name}</TableCell>
                   <TableCell className="hidden sm:table-cell text-sm">{booking.email}</TableCell>
                   <TableCell className="text-sm">{format(new Date(booking.booking_date), 'PP', { locale: fr })}</TableCell>
+                  <TableCell className="text-sm font-medium">{booking.movie_title || 'N/A'}</TableCell>
                   <TableCell className="text-sm">{booking.entry_time || booking.time_slot}</TableCell>
                   <TableCell className="text-sm font-medium">{booking.nb_personne || 1}</TableCell>
                   <TableCell>{getStatusBadge(booking.status, booking.payment_status)}</TableCell>
