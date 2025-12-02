@@ -3700,19 +3700,41 @@ async def reset_all_data(admin = Depends(get_admin_user)):
         raise HTTPException(status_code=500, detail=f"Erreur lors de la réinitialisation: {str(e)}")
 
 # Helper function to get booking details from related tables (JOIN)
-async def get_booking_details_from_schedules(booking_date: date, time_slot: Union[TimeSlot, str]) -> dict:
+async def get_booking_details_from_schedules(
+    booking_date: date, 
+    time_slot: Union[TimeSlot, str],
+    content_id: Optional[str] = None,
+    content_type: Optional[str] = None
+) -> dict:
     """
     Récupère entry_time et movie_title depuis les tables liées via jointures
     Jointure: bookings -> movie_schedules/content_schedules -> movies
     Utilise booking_date et time_slot pour joindre avec movie_schedules/content_schedules
     Puis utilise movie_id pour joindre avec movies et récupérer le title
+    
+    Si content_id et content_type sont fournis, les utilise directement pour récupérer le titre
     """
     booking_date_str = booking_date.isoformat() if isinstance(booking_date, date) else str(booking_date)
     time_slot_str = time_slot.value if isinstance(time_slot, TimeSlot) else str(time_slot)
     normalized_time_slot = normalize_time_slot_value(time_slot_str) if time_slot_str else None
     
+    logging.info(f"🔍 Recherche détails pour booking_date={booking_date_str}, time_slot={time_slot_str}, normalized={normalized_time_slot}, content_id={content_id}, content_type={content_type}")
+    
     entry_time = None
     movie_title = None
+    
+    # Si content_id et content_type sont disponibles, utiliser directement pour récupérer le titre
+    if content_id and content_type:
+        if content_type == "movie":
+            movie = await db.movies.find_one({"id": content_id, "is_active": True})
+            if movie:
+                movie_title = movie.get("title")
+                logging.info(f"✅ Film trouvé directement via content_id: {movie_title}")
+        elif content_type == "event":
+            event = await db.events.find_one({"id": content_id, "is_active": True})
+            if event:
+                movie_title = event.get("title")
+                logging.info(f"✅ Événement trouvé directement via content_id: {movie_title}")
     
     # Chercher dans content_schedules d'abord (nouveau système)
     content_schedule = await db.content_schedules.find_one({
@@ -3722,6 +3744,7 @@ async def get_booking_details_from_schedules(booking_date: date, time_slot: Unio
     })
     
     if content_schedule:
+        logging.info(f"✅ Trouvé content_schedule: {content_schedule.get('content_id')}, type: {content_schedule.get('content_type')}")
         # Récupérer entry_time depuis content_schedule
         entry_time = content_schedule.get("entry_time")
         
@@ -3734,11 +3757,13 @@ async def get_booking_details_from_schedules(booking_date: date, time_slot: Unio
             movie = await db.movies.find_one({"id": schedule_content_id, "is_active": True})
             if movie:
                 movie_title = movie.get("title")
+                logging.info(f"✅ Film trouvé via content_schedule: {movie_title}")
         elif schedule_content_type == "event" and schedule_content_id:
             # Jointure avec events via content_id
             event = await db.events.find_one({"id": schedule_content_id, "is_active": True})
             if event:
                 movie_title = event.get("title")
+                logging.info(f"✅ Événement trouvé via content_schedule: {movie_title}")
         
         # Si entry_time n'est pas dans content_schedule, chercher dans movie_schedules legacy
         if not entry_time:
@@ -3749,6 +3774,8 @@ async def get_booking_details_from_schedules(booking_date: date, time_slot: Unio
             })
             if movie_schedule:
                 entry_time = movie_schedule.get("entry_time")
+    else:
+        logging.info(f"⚠️ Aucun content_schedule trouvé pour date={booking_date_str}, time_slot={normalized_time_slot or time_slot_str}")
     
     # Si pas trouvé dans content_schedules, chercher dans movie_schedules legacy
     if not entry_time or not movie_title:
@@ -3759,6 +3786,7 @@ async def get_booking_details_from_schedules(booking_date: date, time_slot: Unio
         })
         
         if movie_schedule:
+            logging.info(f"✅ Trouvé movie_schedule legacy: movie_id={movie_schedule.get('movie_id')}")
             # Récupérer entry_time depuis movie_schedule
             if not entry_time:
                 entry_time = movie_schedule.get("entry_time")
@@ -3770,6 +3798,13 @@ async def get_booking_details_from_schedules(booking_date: date, time_slot: Unio
                     movie = await db.movies.find_one({"id": movie_id, "is_active": True})
                     if movie:
                         movie_title = movie.get("title")
+                        logging.info(f"✅ Film trouvé via movie_schedule: {movie_title}")
+                    else:
+                        logging.warning(f"⚠️ Film non trouvé avec movie_id={movie_id}")
+                else:
+                    logging.warning(f"⚠️ movie_schedule n'a pas de movie_id")
+        else:
+            logging.warning(f"⚠️ Aucun movie_schedule trouvé pour date={booking_date_str}, time_slot={normalized_time_slot or time_slot_str}")
     
     # Si entry_time n'est toujours pas trouvé, utiliser TimeSlotSettings
     if not entry_time:
@@ -3782,6 +3817,9 @@ async def get_booking_details_from_schedules(booking_date: date, time_slot: Unio
             entry_time = time_settings.second_slot_entry_time
         elif time_slot_str_lower == "01h30" or time_slot_str_lower == time_settings.third_slot_value.lower():
             entry_time = time_settings.third_slot_entry_time
+    
+    if not movie_title:
+        logging.warning(f"❌ Aucun titre de film trouvé pour booking_date={booking_date_str}, time_slot={time_slot_str}")
     
     return {
         "entry_time": entry_time,
@@ -3899,7 +3937,9 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
             # Jointure: bookings (booking_date, time_slot) -> movie_schedules/content_schedules -> movies
             booking_details = await get_booking_details_from_schedules(
                 booking_obj.booking_date,
-                booking_obj.time_slot
+                booking_obj.time_slot,
+                booking_obj.content_id,
+                booking_obj.content_type
             )
             
             # Ajouter entry_time et movie_title au dictionnaire de réponse
@@ -3949,7 +3989,9 @@ async def get_all_admin_bookings(admin = Depends(get_admin_user)):
             # Jointure: bookings (booking_date, time_slot) -> movie_schedules/content_schedules -> movies
             booking_details = await get_booking_details_from_schedules(
                 booking_obj.booking_date,
-                booking_obj.time_slot
+                booking_obj.time_slot,
+                booking_obj.content_id,
+                booking_obj.content_type
             )
             
             # Ajouter entry_time et movie_title au dictionnaire de réponse
