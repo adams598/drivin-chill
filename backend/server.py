@@ -3992,6 +3992,14 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
             
             # Ajouter entry_time et movie_title au dictionnaire de réponse
             booking_dict = booking_obj.dict()
+            # Convertir les dates en strings pour la sérialisation JSON
+            if isinstance(booking_dict.get("booking_date"), date):
+                booking_dict["booking_date"] = booking_dict["booking_date"].isoformat()
+            if isinstance(booking_dict.get("created_at"), datetime):
+                booking_dict["created_at"] = booking_dict["created_at"].isoformat()
+            if isinstance(booking_dict.get("checked_in_at"), datetime):
+                booking_dict["checked_in_at"] = booking_dict["checked_in_at"].isoformat()
+            
             booking_dict["entry_time"] = booking_details.get("entry_time")
             booking_dict["movie_title"] = booking_details.get("movie_title")
             
@@ -4023,7 +4031,7 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération du dashboard: {str(e)}")
 
-@api_router.get("/admin/bookings", response_model=List[TicketBooking])
+@api_router.get("/admin/bookings")
 async def get_all_admin_bookings(admin = Depends(get_admin_user)):
     try:
         bookings = await db.bookings.find().to_list(1000)
@@ -4044,10 +4052,19 @@ async def get_all_admin_bookings(admin = Depends(get_admin_user)):
             
             # Ajouter entry_time et movie_title au dictionnaire de réponse
             booking_dict = booking_obj.dict()
+            # Convertir les dates en strings pour la sérialisation JSON
+            if isinstance(booking_dict.get("booking_date"), date):
+                booking_dict["booking_date"] = booking_dict["booking_date"].isoformat()
+            if isinstance(booking_dict.get("created_at"), datetime):
+                booking_dict["created_at"] = booking_dict["created_at"].isoformat()
+            if isinstance(booking_dict.get("checked_in_at"), datetime):
+                booking_dict["checked_in_at"] = booking_dict["checked_in_at"].isoformat()
+            
             booking_dict["entry_time"] = booking_details.get("entry_time")
             booking_dict["movie_title"] = booking_details.get("movie_title")
             
             # Log pour déboguer
+            logging.info(f"📋 Réservation {booking_obj.id} - entry_time={booking_dict.get('entry_time')}, movie_title={booking_dict.get('movie_title')}, content_id={booking_obj.content_id}, content_type={booking_obj.content_type}")
             if not booking_dict.get("movie_title"):
                 logging.warning(f"⚠️ Réservation {booking_obj.id} ({booking_obj.first_name} {booking_obj.last_name}) - Pas de titre trouvé. content_id={booking_obj.content_id}, content_type={booking_obj.content_type}, date={booking_obj.booking_date}, time_slot={booking_obj.time_slot}")
             
