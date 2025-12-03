@@ -510,8 +510,10 @@ class TicketBooking(BaseModel):
     booking_date: date
     day_of_week: Union[DayOfWeek, str]  # Allow string for events
     time_slot: Union[TimeSlot, str]     # Allow string for events - identifiant du créneau (21h15, 23h45)
-    # Heure d'entrée effective au moment de la réservation (dénormalisée pour l'admin)
+    # Heures effectives au moment de la réservation (dénormalisées pour l'admin et l'email)
     entry_time: Optional[str] = None
+    start_time: Optional[str] = None  # Heure de début du film
+    end_time: Optional[str] = None    # Heure de fin du film
     payment_method: PaymentMethod
     price: float = 17.0
     final_price: Optional[float] = None  # Price after promo code discount
@@ -540,8 +542,10 @@ class TicketBookingCreate(BaseModel):
     payment_method: PaymentMethod
     promo_code: Optional[str] = None
     final_price: Optional[float] = None  # Price after promo code discount
-    # Permet au frontend d'envoyer directement l'heure d'entrée exacte
+    # Permet au frontend d'envoyer directement les horaires exacts
     entry_time: Optional[str] = None
+    start_time: Optional[str] = None  # Heure de début du film
+    end_time: Optional[str] = None    # Heure de fin du film
     nb_personne: int = 1
     # New fields for event booking flexibility
     content_type: Optional[str] = None  # 'movie' or 'event'
@@ -892,7 +896,7 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
         final_schedule = None
         movie_title_final = None
         
-        # 1) Si on a content_id et content_type, chercher directement
+        # 1) Si on a content_id et content_type, chercher directement (priorité absolue)
         if booking.content_id and booking.content_type:
             final_schedule = await db.content_schedules.find_one({
                 "date": booking_date_str,
@@ -906,6 +910,10 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
                     "content_id": booking.content_id,
                     "content_type": booking.content_type
                 })
+            
+            if final_schedule:
+                logging.info(f"📧 ✅ Schedule trouvé directement via content_id={booking.content_id}, content_type={booking.content_type}")
+                logging.info(f"📧 Schedule contenu: entry_time={final_schedule.get('entry_time')}, start_time={final_schedule.get('start_time')}, end_time={final_schedule.get('end_time')}")
         
         # 2) Si pas trouvé, récupérer movie_title d'abord pour chercher précisément
         if not final_schedule:
@@ -1001,10 +1009,14 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
                     })
         
         # 4) Récupérer tous les horaires depuis le même schedule (comme dans le frontend)
+        # Priorité aux valeurs stockées dans la réservation (dénormalisées)
+        schedule_found = False
         if final_schedule:
+            schedule_found = True
+            # Utiliser les valeurs stockées dans la réservation si disponibles, sinon depuis le schedule
             entry_time = booking.entry_time or final_schedule.get("entry_time")
-            start_time = final_schedule.get("start_time")
-            end_time = final_schedule.get("end_time")
+            start_time = booking.start_time or final_schedule.get("start_time")
+            end_time = booking.end_time or final_schedule.get("end_time")
             
             # Récupérer aussi movie_title depuis le schedule si pas déjà fait
             if not movie_title_final:
@@ -1022,12 +1034,27 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
                         movie_title_final = movie.get("title")
             
             logging.info(f"📧 Horaires depuis schedule complet: entry={entry_time}, start={start_time}, end={end_time}, movie={movie_title_final}")
+            logging.info(f"📧 Schedule trouvé - contenu brut: entry_time={final_schedule.get('entry_time')}, start_time={final_schedule.get('start_time')}, end_time={final_schedule.get('end_time')}, content_id={final_schedule.get('content_id')}, movie_id={final_schedule.get('movie_id')}")
+            
+            # Si le schedule a été trouvé mais n'a pas start_time/end_time, c'est un problème dans la base de données
+            # On NE DOIT PAS utiliser le fallback car cela écraserait les valeurs correctes du schedule
+            # On garde les valeurs None du schedule plutôt que d'utiliser les valeurs par défaut du fallback
+            if not start_time or not end_time:
+                logging.error(f"📧 ❌ ERREUR: Schedule trouvé mais start_time ou end_time manquants dans la base de données!")
+                logging.error(f"📧 ❌ start_time={start_time}, end_time={end_time}")
+                logging.error(f"📧 ❌ Le schedule (content_id={final_schedule.get('content_id')}, date={booking_date_str}) devrait avoir ces champs remplis.")
+                logging.error(f"📧 ❌ Les valeurs None seront utilisées dans l'email (pas de fallback pour éviter d'écraser les valeurs correctes).")
+        else:
+            logging.warning(f"📧 ⚠️ Aucun schedule trouvé pour booking {booking.id} - date={booking_date_str}, time_slot={time_slot_str}, content_id={booking.content_id}")
         
         movie_title = movie_title_final or movie_title
         
-        # Si les horaires ne sont pas dans le schedule, utiliser TimeSlotSettings comme fallback
-        if not entry_time or not start_time or not end_time:
-            logging.info(f"📧 Horaires manquants dans schedule, utilisation de TimeSlotSettings comme fallback")
+        # Utiliser TimeSlotSettings comme fallback UNIQUEMENT si aucun schedule n'a été trouvé
+        # Si un schedule est trouvé mais n'a pas start_time/end_time, on NE DOIT PAS utiliser le fallback
+        # car cela écraserait les valeurs correctes. On doit utiliser les valeurs du schedule même si elles sont None.
+        # Le fallback ne doit être utilisé que si vraiment aucun schedule n'est trouvé.
+        if not schedule_found:
+            logging.info(f"📧 Horaires manquants (aucun schedule trouvé), utilisation de TimeSlotSettings comme fallback")
             try:
                 time_settings = await get_time_slot_settings()
                 time_slot_str = str(booking.time_slot).lower()
@@ -1079,6 +1106,13 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
                 logging.info(f"📧 Horaires depuis TimeSlotSettings: entry={entry_time}, start={start_time}, end={end_time}")
             except Exception as e:
                 logging.warning(f"⚠️ Erreur lors de la récupération des TimeSlotSettings: {str(e)}")
+        elif schedule_found and (not start_time or not end_time):
+            # Si un schedule est trouvé mais n'a pas start_time/end_time, on ne doit PAS utiliser le fallback
+            # car cela écraserait les valeurs correctes. On garde les valeurs None ou vides du schedule.
+            logging.warning(f"📧 ⚠️ Schedule trouvé mais start_time ou end_time manquants dans la base de données")
+            logging.warning(f"📧 ⚠️ start_time={start_time}, end_time={end_time}")
+            logging.warning(f"📧 ⚠️ Le schedule devrait avoir ces champs remplis. Les valeurs None seront affichées dans l'email.")
+            # Ne pas utiliser le fallback - garder les valeurs du schedule (même si None)
         
         # Récupérer les informations du code promo si applicable
         if booking_promo_code:
@@ -1568,12 +1602,12 @@ async def create_booking(booking_data: TicketBookingCreate):
         if promo_discount_info:
             booking_dict["promo_discount_info"] = promo_discount_info
         
-        # S'assurer que entry_time est renseigné :
-        # 1) Priorité à la valeur explicite envoyée par le frontend
-        # 2) Sinon, essayer de la récupérer depuis content_schedule / movie_schedule
-        # 3) Sinon, valeur par défaut basée sur time_slot via get_booking_details_from_schedules
-        if not booking_dict.get("entry_time"):
-            derived_entry_time = None
+        # S'assurer que entry_time, start_time et end_time sont renseignés :
+        # 1) Priorité aux valeurs explicites envoyées par le frontend
+        # 2) Sinon, essayer de les récupérer depuis content_schedule / movie_schedule
+        # 3) Sinon, valeurs par défaut basées sur time_slot via get_booking_details_from_schedules
+        if not booking_dict.get("entry_time") or not booking_dict.get("start_time") or not booking_dict.get("end_time"):
+            derived_times = {}
             try:
                 # Essayer de dériver via les programmations existantes
                 booking_details = await get_booking_details_from_schedules(
@@ -1582,15 +1616,28 @@ async def create_booking(booking_data: TicketBookingCreate):
                     content_id=booking_dict.get("content_id"),
                     content_type=booking_dict.get("content_type"),
                 )
-                derived_entry_time = booking_details.get("entry_time")
+                derived_times["entry_time"] = booking_details.get("entry_time")
+                
+                # Récupérer aussi start_time et end_time depuis le schedule trouvé
+                if content_schedule:
+                    derived_times["start_time"] = content_schedule.get("start_time")
+                    derived_times["end_time"] = content_schedule.get("end_time")
+                elif movie_schedule:
+                    derived_times["start_time"] = movie_schedule.get("start_time")
+                    derived_times["end_time"] = movie_schedule.get("end_time")
             except Exception as e:
                 logging.warning(
-                    "⚠️ Impossible de dériver entry_time lors de la création de réservation: %s",
+                    "⚠️ Impossible de dériver les horaires lors de la création de réservation: %s",
                     str(e),
                 )
 
-            if derived_entry_time:
-                booking_dict["entry_time"] = derived_entry_time
+            # Utiliser les valeurs dérivées si elles sont disponibles et que les valeurs du frontend ne le sont pas
+            if derived_times.get("entry_time") and not booking_dict.get("entry_time"):
+                booking_dict["entry_time"] = derived_times["entry_time"]
+            if derived_times.get("start_time") and not booking_dict.get("start_time"):
+                booking_dict["start_time"] = derived_times["start_time"]
+            if derived_times.get("end_time") and not booking_dict.get("end_time"):
+                booking_dict["end_time"] = derived_times["end_time"]
         
         # Sauvegarder content_id et content_type si disponibles depuis le schedule trouvé
         if content_schedule:

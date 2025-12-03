@@ -290,6 +290,66 @@ function App() {
     return null;
   };
 
+  // Fonction pour récupérer start_time pour la réservation
+  const getCurrentStartTimeForBooking = () => {
+    // 1) Si on a un scheduleId sélectionné et des movieSchedules chargés
+    if (selectedScheduleId && movieSchedules.length > 0) {
+      const scheduleForId = movieSchedules.find(
+        (s) => String(s.schedule.id) === String(selectedScheduleId)
+      );
+      if (scheduleForId?.schedule?.start_time) {
+        return scheduleForId.schedule.start_time;
+      }
+    }
+
+    // 2) Si on a un schedule pré-rempli avec start_time
+    if (preFillData?.schedule?.start_time) {
+      return preFillData.schedule.start_time;
+    }
+
+    // 3) Si on a un selectedTimeSlot et des movieSchedules
+    if (selectedTimeSlot && movieSchedules.length > 0) {
+      const scheduleForSlot = movieSchedules.find(
+        (s) => s.schedule.time_slot === selectedTimeSlot
+      );
+      if (scheduleForSlot?.schedule?.start_time) {
+        return scheduleForSlot.schedule.start_time;
+      }
+    }
+
+    return null;
+  };
+
+  // Fonction pour récupérer end_time pour la réservation
+  const getCurrentEndTimeForBooking = () => {
+    // 1) Si on a un scheduleId sélectionné et des movieSchedules chargés
+    if (selectedScheduleId && movieSchedules.length > 0) {
+      const scheduleForId = movieSchedules.find(
+        (s) => String(s.schedule.id) === String(selectedScheduleId)
+      );
+      if (scheduleForId?.schedule?.end_time) {
+        return scheduleForId.schedule.end_time;
+      }
+    }
+
+    // 2) Si on a un schedule pré-rempli avec end_time
+    if (preFillData?.schedule?.end_time) {
+      return preFillData.schedule.end_time;
+    }
+
+    // 3) Si on a un selectedTimeSlot et des movieSchedules
+    if (selectedTimeSlot && movieSchedules.length > 0) {
+      const scheduleForSlot = movieSchedules.find(
+        (s) => s.schedule.time_slot === selectedTimeSlot
+      );
+      if (scheduleForSlot?.schedule?.end_time) {
+        return scheduleForSlot.schedule.end_time;
+      }
+    }
+
+    return null;
+  };
+
   // Debug: Log when dialog state changes
   useEffect(() => {
     console.log("showAdminLoginDialog state:", showAdminLoginDialog);
@@ -976,6 +1036,8 @@ function App() {
 
       // First create the booking
       const entryTimeForBooking = getCurrentEntryTimeForBooking();
+      const startTimeForBooking = getCurrentStartTimeForBooking();
+      const endTimeForBooking = getCurrentEndTimeForBooking();
 
       const bookingData = {
         first_name: formData.firstName.trim(),
@@ -986,6 +1048,8 @@ function App() {
         day_of_week: selectedDayOfWeek,
         time_slot: selectedTimeSlot,
         entry_time: entryTimeForBooking,
+        start_time: startTimeForBooking,
+        end_time: endTimeForBooking,
         payment_method: formData.paymentMethod,
         promo_code: formData.promoCode
           ? formData.promoCode.trim().toUpperCase()
