@@ -204,6 +204,47 @@ function App() {
   const [showAdminLoginDialog, setShowAdminLoginDialog] = useState(false);
   const [adminPassword, setAdminPassword] = useState("");
 
+  // Helpers pour afficher correctement les horaires pré‑remplis
+  const getPreFilledScheduleLabel = () => {
+    if (!preFillData) return "";
+
+    const scheduleFromId =
+      preFillData.scheduleId &&
+      movieSchedules.find(
+        (s) => String(s.schedule.id) === String(preFillData.scheduleId)
+      )?.schedule;
+
+    const schedule = scheduleFromId || preFillData.schedule;
+
+    if (schedule?.entry_time && schedule?.start_time) {
+      return `Entrée: ${schedule.entry_time} • Début: ${schedule.start_time}${
+        schedule.end_time ? ` • Fin: ${schedule.end_time}` : ""
+      }`;
+    }
+
+    return getTimeSlotDisplay(preFillData.timeSlot);
+  };
+
+  const getPreFilledScheduleSubLabel = () => {
+    if (!preFillData) return "";
+
+    const scheduleFromId =
+      preFillData.scheduleId &&
+      movieSchedules.find(
+        (s) => String(s.schedule.id) === String(preFillData.scheduleId)
+      )?.schedule;
+
+    const schedule = scheduleFromId || preFillData.schedule;
+
+    if (schedule?.entry_time && schedule?.start_time) {
+      return `Film à ${schedule.start_time}${schedule.end_time ? `` : ""}`;
+    }
+
+    return isHalloween
+      ? mapTimeSlotToHalloween(preFillData.timeSlot)
+      : preFillData.timeSlot;
+  };
+
   // Debug: Log when dialog state changes
   useEffect(() => {
     console.log("showAdminLoginDialog state:", showAdminLoginDialog);
@@ -2011,8 +2052,7 @@ function App() {
                   )) ||
                 // Fallback sur le time_slot (ancien comportement)
                 movieSchedules.find(
-                  (schedule) =>
-                    schedule.schedule.time_slot === selectedTimeSlot
+                  (schedule) => schedule.schedule.time_slot === selectedTimeSlot
                 );
               const actualSchedule =
                 scheduleForSlot?.schedule || preFillData?.schedule;
@@ -2159,9 +2199,7 @@ function App() {
                                   {schedule.schedule.entry_time &&
                                   schedule.schedule.start_time
                                     ? `Film à ${schedule.schedule.start_time}${
-                                        schedule.schedule.end_time
-                                          ? ``
-                                          : ""
+                                        schedule.schedule.end_time ? `` : ""
                                       }`
                                     : isHalloween
                                     ? mapTimeSlotToHalloween(
@@ -2245,20 +2283,10 @@ function App() {
                             ) : (
                               <>
                                 <div className="font-medium">
-                                  {preFillData.schedule?.entry_time &&
-                                  preFillData.schedule?.start_time
-                                    ? `Entrée: ${preFillData.schedule.entry_time} • Début: ${preFillData.schedule.start_time}`
-                                    : getTimeSlotDisplay(preFillData.timeSlot)}
+                                  {getPreFilledScheduleLabel()}
                                 </div>
                                 <div className="text-sm text-gray-300">
-                                  {preFillData.schedule?.entry_time &&
-                                  preFillData.schedule?.start_time
-                                    ? `Film à ${preFillData.schedule.start_time}`
-                                    : isHalloween
-                                    ? mapTimeSlotToHalloween(
-                                        preFillData.timeSlot
-                                      )
-                                    : preFillData.timeSlot}
+                                  {getPreFilledScheduleSubLabel()}
                                 </div>
                                 <div className="text-sm text-gray-400">
                                   {preFillData.schedule?.entry_time &&
