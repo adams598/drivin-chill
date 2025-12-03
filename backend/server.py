@@ -887,149 +887,143 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
         booking_date_str = booking.booking_date.isoformat() if isinstance(booking.booking_date, date) else str(booking.booking_date)
         time_slot_str = str(booking.time_slot)
         
-        # Première passe : récupérer movie_title et entry_time
-        booking_details = await get_booking_details_from_schedules(
-            booking.booking_date,
-            booking.time_slot,
-            booking.content_id,
-            booking.content_type
-        )
+        # Récupérer le schedule complet une seule fois pour avoir tous les horaires cohérents
+        # Utiliser la même logique que dans le frontend : récupérer le schedule complet
+        final_schedule = None
+        movie_title_final = None
         
-        # Si on n'a pas entry_time stocké mais qu'on a movie_title, réessayer avec movie_title comme filtre
-        # TOUJOURS réessayer si entry_time est 17h45 (valeur par défaut suspecte) ou manquant
-        movie_title_from_details = booking_details.get("movie_title")
-        if movie_title_from_details and (not booking.entry_time or booking_details.get("entry_time") == "17h45"):
-            logging.info(f"📧 Tentative de correction horaires pour réservation {booking.id} avec movie_title: {movie_title_from_details}")
-            booking_details_with_title = await get_booking_details_from_schedules(
-                booking.booking_date,
-                booking.time_slot,
-                booking.content_id,
-                booking.content_type,
-                movie_title_from_details
-            )
-            # Utiliser entry_time de la deuxième passe si meilleur
-            new_entry_time = booking_details_with_title.get("entry_time")
-            if new_entry_time and new_entry_time != "17h45":
-                booking_details["entry_time"] = new_entry_time
-                logging.info(f"📧 entry_time corrigé via movie_title: {new_entry_time}")
-        
-        entry_time = booking.entry_time or booking_details.get("entry_time")
-        movie_title = movie_title_from_details or movie_title
-        
-        logging.info(f"📧 Horaires récupérés: entry={entry_time}, movie_title={movie_title}")
-        
-        # Maintenant récupérer start_time et end_time depuis le bon schedule
-        # Utiliser la même logique que pour entry_time : chercher avec movie_title si disponible
-        content_schedule = None
+        # 1) Si on a content_id et content_type, chercher directement
         if booking.content_id and booking.content_type:
-            # Chercher le schedule précis via content_id
-            content_schedule = await db.content_schedules.find_one({
+            final_schedule = await db.content_schedules.find_one({
                 "date": booking_date_str,
                 "content_id": booking.content_id,
                 "content_type": booking.content_type,
                 "is_active": True
             })
-            if not content_schedule:
-                content_schedule = await db.content_schedules.find_one({
+            if not final_schedule:
+                final_schedule = await db.content_schedules.find_one({
                     "date": booking_date_str,
                     "content_id": booking.content_id,
                     "content_type": booking.content_type
                 })
         
-        # Si pas trouvé, chercher par time_slot et movie_title si disponible (même logique que pour entry_time)
-        if not content_schedule and movie_title:
-            all_schedules = await db.content_schedules.find({
-                "date": booking_date_str,
-                "time_slot": time_slot_str,
-                "is_active": True
-            }).to_list(100)
+        # 2) Si pas trouvé, récupérer movie_title d'abord pour chercher précisément
+        if not final_schedule:
+            booking_details = await get_booking_details_from_schedules(
+                booking.booking_date,
+                booking.time_slot,
+                booking.content_id,
+                booking.content_type
+            )
+            movie_title_final = booking_details.get("movie_title")
             
-            if not all_schedules:
-                all_schedules = await db.content_schedules.find({
-                    "date": booking_date_str,
-                    "time_slot": time_slot_str
-                }).to_list(100)
-            
-            # Trouver le schedule qui correspond au movie_title
-            for schedule in all_schedules:
-                schedule_content_id = schedule.get("content_id")
-                schedule_content_type = schedule.get("content_type", "movie")
-                
-                if schedule_content_type == "movie" and schedule_content_id:
-                    movie = await db.movies.find_one({"id": schedule_content_id})
-                    if movie and movie.get("title") == movie_title:
-                        content_schedule = schedule
-                        break
-                elif schedule_content_type == "event" and schedule_content_id:
-                    event = await db.events.find_one({"id": schedule_content_id})
-                    if event and event.get("title") == movie_title:
-                        content_schedule = schedule
-                        break
-        
-        # Si toujours pas trouvé, chercher par time_slot seul
-        if not content_schedule:
-            content_schedule = await db.content_schedules.find_one({
-                "date": booking_date_str,
-                "time_slot": time_slot_str,
-                "is_active": True
-            })
-            if not content_schedule:
-                content_schedule = await db.content_schedules.find_one({
-                    "date": booking_date_str,
-                    "time_slot": time_slot_str
-                })
-        
-        # Si trouvé dans content_schedules, récupérer les horaires
-        if content_schedule:
-            entry_time = entry_time or content_schedule.get("entry_time")
-            start_time = content_schedule.get("start_time")
-            end_time = content_schedule.get("end_time")
-            logging.info(f"📧 Horaires depuis content_schedule: entry={entry_time}, start={start_time}, end={end_time}")
-        else:
-            # Fallback : chercher dans movie_schedules legacy
             # Si on a movie_title, chercher tous les schedules et trouver celui qui correspond
-            schedule = None
-            if movie_title:
-                all_movie_schedules = await db.movie_schedules.find({
+            if movie_title_final:
+                # Chercher dans content_schedules
+                all_schedules = await db.content_schedules.find({
                     "date": booking_date_str,
                     "time_slot": time_slot_str,
                     "is_active": True
                 }).to_list(100)
                 
-                if not all_movie_schedules:
-                    all_movie_schedules = await db.movie_schedules.find({
+                if not all_schedules:
+                    all_schedules = await db.content_schedules.find({
                         "date": booking_date_str,
                         "time_slot": time_slot_str
                     }).to_list(100)
                 
-                # Pour chaque schedule, vérifier si le titre correspond
-                for sched in all_movie_schedules:
-                    movie_id = sched.get("movie_id")
-                    if movie_id:
-                        movie = await db.movies.find_one({"id": movie_id})
-                        if movie and movie.get("title") == movie_title:
-                            schedule = sched
-                            logging.info(f"📧 movie_schedule trouvé via movie_title '{movie_title}'")
+                # Trouver le schedule qui correspond au movie_title
+                for schedule in all_schedules:
+                    schedule_content_id = schedule.get("content_id")
+                    schedule_content_type = schedule.get("content_type", "movie")
+                    
+                    if schedule_content_type == "movie" and schedule_content_id:
+                        movie = await db.movies.find_one({"id": schedule_content_id})
+                        if movie and movie.get("title") == movie_title_final:
+                            final_schedule = schedule
+                            logging.info(f"📧 content_schedule trouvé via movie_title '{movie_title_final}'")
                             break
+                    elif schedule_content_type == "event" and schedule_content_id:
+                        event = await db.events.find_one({"id": schedule_content_id})
+                        if event and event.get("title") == movie_title_final:
+                            final_schedule = schedule
+                            logging.info(f"📧 content_schedule trouvé via movie_title '{movie_title_final}'")
+                            break
+                
+                # Si pas trouvé dans content_schedules, chercher dans movie_schedules legacy
+                if not final_schedule:
+                    all_movie_schedules = await db.movie_schedules.find({
+                        "date": booking_date_str,
+                        "time_slot": time_slot_str,
+                        "is_active": True
+                    }).to_list(100)
+                    
+                    if not all_movie_schedules:
+                        all_movie_schedules = await db.movie_schedules.find({
+                            "date": booking_date_str,
+                            "time_slot": time_slot_str
+                        }).to_list(100)
+                    
+                    # Pour chaque schedule, vérifier si le titre correspond
+                    for sched in all_movie_schedules:
+                        movie_id = sched.get("movie_id")
+                        if movie_id:
+                            movie = await db.movies.find_one({"id": movie_id})
+                            if movie and movie.get("title") == movie_title_final:
+                                final_schedule = sched
+                                logging.info(f"📧 movie_schedule trouvé via movie_title '{movie_title_final}'")
+                                break
+        
+        # 3) Si toujours pas trouvé, chercher par time_slot seul (fallback)
+        if not final_schedule:
+            final_schedule = await db.content_schedules.find_one({
+                "date": booking_date_str,
+                "time_slot": time_slot_str,
+                "is_active": True
+            })
+            if not final_schedule:
+                final_schedule = await db.content_schedules.find_one({
+                    "date": booking_date_str,
+                    "time_slot": time_slot_str
+                })
             
-            # Si toujours pas trouvé, chercher normalement
-            if not schedule:
-                schedule = await db.movie_schedules.find_one({
+            # Si toujours pas trouvé, chercher dans movie_schedules legacy
+            if not final_schedule:
+                final_schedule = await db.movie_schedules.find_one({
                     "date": booking_date_str,
                     "time_slot": time_slot_str,
                     "is_active": True
                 })
-                if not schedule:
-                    schedule = await db.movie_schedules.find_one({
+                if not final_schedule:
+                    final_schedule = await db.movie_schedules.find_one({
                         "date": booking_date_str,
                         "time_slot": time_slot_str
                     })
+        
+        # 4) Récupérer tous les horaires depuis le même schedule (comme dans le frontend)
+        if final_schedule:
+            entry_time = booking.entry_time or final_schedule.get("entry_time")
+            start_time = final_schedule.get("start_time")
+            end_time = final_schedule.get("end_time")
             
-            if schedule:
-                entry_time = entry_time or schedule.get("entry_time")
-                start_time = schedule.get("start_time")
-                end_time = schedule.get("end_time")
-                logging.info(f"📧 Horaires depuis movie_schedule: entry={entry_time}, start={start_time}, end={end_time}")
+            # Récupérer aussi movie_title depuis le schedule si pas déjà fait
+            if not movie_title_final:
+                if final_schedule.get("content_type") == "movie" and final_schedule.get("content_id"):
+                    movie = await db.movies.find_one({"id": final_schedule.get("content_id")})
+                    if movie:
+                        movie_title_final = movie.get("title")
+                elif final_schedule.get("content_type") == "event" and final_schedule.get("content_id"):
+                    event = await db.events.find_one({"id": final_schedule.get("content_id")})
+                    if event:
+                        movie_title_final = event.get("title")
+                elif final_schedule.get("movie_id"):
+                    movie = await db.movies.find_one({"id": final_schedule.get("movie_id")})
+                    if movie:
+                        movie_title_final = movie.get("title")
+            
+            logging.info(f"📧 Horaires depuis schedule complet: entry={entry_time}, start={start_time}, end={end_time}, movie={movie_title_final}")
+        
+        movie_title = movie_title_final or movie_title
         
         # Si les horaires ne sont pas dans le schedule, utiliser TimeSlotSettings comme fallback
         if not entry_time or not start_time or not end_time:
