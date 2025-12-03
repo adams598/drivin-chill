@@ -167,6 +167,8 @@ function App() {
   }, []);
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState("");
+  // Nouvel état : identifiant unique de la séance sélectionnée
+  const [selectedScheduleId, setSelectedScheduleId] = useState(null);
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState("");
   const [movieSchedules, setMovieSchedules] = useState([]);
   const [selectedMovie, setSelectedMovie] = useState(null);
@@ -520,6 +522,8 @@ function App() {
     const selectedDateObj = new Date(bookingData.selectedDate);
     setSelectedDate(selectedDateObj);
     setSelectedTimeSlot(bookingData.selectedTimeSlot);
+    // Pré‑sélectionner aussi l'ID de la séance si disponible
+    setSelectedScheduleId(bookingData.schedule?.id || null);
     setSelectedMovie(bookingData.selectedMovie);
 
     // Set form data
@@ -549,6 +553,7 @@ function App() {
     setPreFillData({
       date: bookingData.selectedDate,
       timeSlot: bookingData.selectedTimeSlot,
+      scheduleId: bookingData.schedule?.id || null,
       movie: bookingData.selectedMovie,
       movieTitle: bookingData.selectedMovie.title,
       isEvent: bookingData.isEvent || false,
@@ -652,6 +657,7 @@ function App() {
       setSelectedDate(null);
       setSelectedDayOfWeek("");
       setSelectedTimeSlot("");
+      setSelectedScheduleId(null);
       setSelectedMovie(null);
       setMovieSchedules([]);
       return;
@@ -660,6 +666,7 @@ function App() {
     setSelectedDate(date);
     setSelectedDayOfWeek(getDayOfWeek(date));
     setSelectedTimeSlot(""); // Reset time slot selection
+    setSelectedScheduleId(null); // Reset schedule selection
     setSelectedMovie(null); // Reset movie selection
 
     // Show loading state
@@ -764,15 +771,24 @@ function App() {
   };
 
   // Handle time slot selection with content info (movie or event)
-  const handleTimeSlotSelect = async (timeSlot) => {
-    setSelectedTimeSlot(timeSlot);
+  // On utilise maintenant l'ID de la séance comme valeur du Select
+  const handleTimeSlotSelect = async (scheduleId) => {
+    setSelectedScheduleId(scheduleId);
 
-    // Find the schedule for this time slot
+    // Retrouver la séance correspondante à partir de son ID
     const scheduleForSlot = movieSchedules.find(
-      (schedule) => schedule.schedule.time_slot === timeSlot
+      (schedule) => String(schedule.schedule.id) === String(scheduleId)
     );
 
     if (scheduleForSlot) {
+      const timeSlot =
+        scheduleForSlot.schedule.time_slot ||
+        scheduleForSlot.schedule.custom_time ||
+        "";
+
+      // Mettre à jour le créneau horaire réel utilisé pour la réservation
+      setSelectedTimeSlot(timeSlot);
+
       // For events, the content is in scheduleForSlot.content
       // For movies, the content is in scheduleForSlot.movie
       const content = scheduleForSlot.content || scheduleForSlot.movie;
@@ -792,17 +808,23 @@ function App() {
 
           // Try to find in freshly fetched schedules
           const updatedSchedule = fetchedSchedules.find(
-            (schedule) => schedule.schedule.time_slot === timeSlot
+            (schedule) => String(schedule.schedule.id) === String(scheduleId)
           );
 
           if (updatedSchedule) {
+            const updatedTimeSlot =
+              updatedSchedule.schedule.time_slot ||
+              updatedSchedule.schedule.custom_time ||
+              "";
+            setSelectedTimeSlot(updatedTimeSlot);
+
             const content = updatedSchedule.content || updatedSchedule.movie;
             setSelectedMovie(content);
           } else {
             setSelectedMovie(null);
             // Don't show warning - backend will handle validation
             console.warn(
-              `No schedule found for time slot ${timeSlot} on ${dateString}`
+              `No schedule found for schedule id ${scheduleId} on ${dateString}`
             );
           }
         } catch (error) {
@@ -1090,6 +1112,7 @@ function App() {
     setCurrentStep("home");
     setSelectedDate(null);
     setSelectedTimeSlot("");
+    setSelectedScheduleId(null);
     setSelectedDayOfWeek("");
     setFormData({
       firstName: "",
@@ -1974,13 +1997,23 @@ function App() {
 
           {/* Indicateur de pré-remplissage */}
           {selectedDate &&
-            selectedTimeSlot &&
+            (selectedScheduleId || selectedTimeSlot) &&
             selectedMovie &&
             (() => {
               // Trouver le schedule correspondant pour obtenir les horaires réels
-              const scheduleForSlot = movieSchedules.find(
-                (schedule) => schedule.schedule.time_slot === selectedTimeSlot
-              );
+              const scheduleForSlot =
+                // Priorité à l'ID de séance si disponible
+                (selectedScheduleId &&
+                  movieSchedules.find(
+                    (schedule) =>
+                      String(schedule.schedule.id) ===
+                      String(selectedScheduleId)
+                  )) ||
+                // Fallback sur le time_slot (ancien comportement)
+                movieSchedules.find(
+                  (schedule) =>
+                    schedule.schedule.time_slot === selectedTimeSlot
+                );
               const actualSchedule =
                 scheduleForSlot?.schedule || preFillData?.schedule;
 
@@ -2069,7 +2102,8 @@ function App() {
               <div className="space-y-2">
                 <Label className="text-white">Créneau horaire *</Label>
                 <Select
-                  value={selectedTimeSlot}
+                  // On utilise l'ID de la séance comme valeur interne
+                  value={selectedScheduleId ? String(selectedScheduleId) : ""}
                   onValueChange={handleTimeSlotSelect}
                   disabled={!selectedDate}
                 >
@@ -2098,7 +2132,7 @@ function App() {
                           return (
                             <SelectItem
                               key={schedule.schedule.id}
-                              value={schedule.schedule.time_slot}
+                              value={String(schedule.schedule.id)}
                               className={`text-white hover:bg-gray-700 ${
                                 isBookingClosed ? "opacity-50" : ""
                               }`}
@@ -2189,8 +2223,10 @@ function App() {
                       ) : // Show pre-filled option
                       isPreFilled && preFillData ? (
                         <SelectItem
-                          key={preFillData.timeSlot}
-                          value={preFillData.timeSlot}
+                          key={preFillData.scheduleId || preFillData.timeSlot}
+                          value={String(
+                            preFillData.scheduleId || preFillData.timeSlot
+                          )}
                           className="text-white hover:bg-gray-700"
                         >
                           <div>

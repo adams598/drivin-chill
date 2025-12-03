@@ -18,3 +18,4 @@ jobs:
           echo "🔍 Vérifiez le déploiement sur Vercel"
           echo "📋 Une fois validé, promouvez vers production via l'interface Vercel"
 
+
