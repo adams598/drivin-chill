@@ -247,23 +247,46 @@ function App() {
 
   // Retourne l'heure d'entrée exacte pour la réservation en cours
   const getCurrentEntryTimeForBooking = () => {
-    // 1) Si on a un schedule pré-rempli avec entry_time, le retourner
-    if (preFillData?.schedule?.entry_time) {
-      return preFillData.schedule.entry_time;
-    }
-
-    // 2) Si on a un scheduleId sélectionné et des movieSchedules chargés,
-    // retrouver la séance correspondante
+    // 1) Si on a un scheduleId sélectionné et des movieSchedules chargés,
+    // retrouver la séance correspondante (priorité la plus haute)
     if (selectedScheduleId && movieSchedules.length > 0) {
       const scheduleForId = movieSchedules.find(
         (s) => String(s.schedule.id) === String(selectedScheduleId)
       );
       if (scheduleForId?.schedule?.entry_time) {
+        console.log(
+          "✅ entry_time trouvé via selectedScheduleId:",
+          scheduleForId.schedule.entry_time
+        );
         return scheduleForId.schedule.entry_time;
       }
     }
 
-    // 3) Fallback : pas d'heure d'entrée spécifique trouvée
+    // 2) Si on a un schedule pré-rempli avec entry_time, le retourner
+    if (preFillData?.schedule?.entry_time) {
+      console.log(
+        "✅ entry_time trouvé via preFillData:",
+        preFillData.schedule.entry_time
+      );
+      return preFillData.schedule.entry_time;
+    }
+
+    // 3) Si on a un selectedTimeSlot et des movieSchedules, chercher par time_slot
+    if (selectedTimeSlot && movieSchedules.length > 0) {
+      const scheduleForSlot = movieSchedules.find(
+        (s) => s.schedule.time_slot === selectedTimeSlot
+      );
+      if (scheduleForSlot?.schedule?.entry_time) {
+        console.log(
+          "✅ entry_time trouvé via selectedTimeSlot:",
+          scheduleForSlot.schedule.entry_time
+        );
+        return scheduleForSlot.schedule.entry_time;
+      }
+    }
+
+    // 4) Fallback : pas d'heure d'entrée spécifique trouvée
+    console.warn("⚠️ Aucun entry_time trouvé pour la réservation");
     return null;
   };
 

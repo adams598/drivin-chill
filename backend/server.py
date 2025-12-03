@@ -4055,7 +4055,12 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
                 booking_dict["checked_in_at"] = booking_dict["checked_in_at"].isoformat()
             
             # entry_time stocké en base a priorité, sinon on utilise celui dérivé
-            booking_dict["entry_time"] = booking_obj.entry_time or booking_details.get("entry_time")
+            stored_entry_time = booking_obj.entry_time if booking_obj.entry_time else None
+            if stored_entry_time:
+                booking_dict["entry_time"] = stored_entry_time
+            else:
+                booking_dict["entry_time"] = booking_details.get("entry_time")
+            
             booking_dict["movie_title"] = booking_details.get("movie_title")
             
             enriched_recent_bookings.append(booking_dict)
@@ -4116,11 +4121,20 @@ async def get_all_admin_bookings(admin = Depends(get_admin_user)):
                 booking_dict["checked_in_at"] = booking_dict["checked_in_at"].isoformat()
             
             # entry_time stocké en base a priorité, sinon on utilise celui dérivé
-            booking_dict["entry_time"] = booking_obj.entry_time or booking_details.get("entry_time")
+            # Vérifier explicitement si entry_time existe et n'est pas vide
+            stored_entry_time = booking_obj.entry_time if booking_obj.entry_time else None
+            if stored_entry_time:
+                booking_dict["entry_time"] = stored_entry_time
+                logging.info(f"✅ Réservation {booking_obj.id} - Utilisation entry_time stocké: {stored_entry_time}")
+            else:
+                derived_entry_time = booking_details.get("entry_time")
+                booking_dict["entry_time"] = derived_entry_time
+                logging.info(f"⚠️ Réservation {booking_obj.id} - Utilisation entry_time dérivé: {derived_entry_time}")
+            
             booking_dict["movie_title"] = booking_details.get("movie_title")
             
             # Log pour déboguer
-            logging.info(f"📋 Réservation {booking_obj.id} - entry_time={booking_dict.get('entry_time')}, movie_title={booking_dict.get('movie_title')}, content_id={booking_obj.content_id}, content_type={booking_obj.content_type}")
+            logging.info(f"📋 Réservation {booking_obj.id} - entry_time final={booking_dict.get('entry_time')}, movie_title={booking_dict.get('movie_title')}, content_id={booking_obj.content_id}, content_type={booking_obj.content_type}, stored_entry_time={stored_entry_time}")
             if not booking_dict.get("movie_title"):
                 logging.warning(f"⚠️ Réservation {booking_obj.id} ({booking_obj.first_name} {booking_obj.last_name}) - Pas de titre trouvé. content_id={booking_obj.content_id}, content_type={booking_obj.content_type}, date={booking_obj.booking_date}, time_slot={booking_obj.time_slot}")
             
