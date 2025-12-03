@@ -245,6 +245,28 @@ function App() {
       : preFillData.timeSlot;
   };
 
+  // Retourne l'heure d'entrée exacte pour la réservation en cours
+  const getCurrentEntryTimeForBooking = () => {
+    // 1) Si on a un schedule pré-rempli avec entry_time, le retourner
+    if (preFillData?.schedule?.entry_time) {
+      return preFillData.schedule.entry_time;
+    }
+
+    // 2) Si on a un scheduleId sélectionné et des movieSchedules chargés,
+    // retrouver la séance correspondante
+    if (selectedScheduleId && movieSchedules.length > 0) {
+      const scheduleForId = movieSchedules.find(
+        (s) => String(s.schedule.id) === String(selectedScheduleId)
+      );
+      if (scheduleForId?.schedule?.entry_time) {
+        return scheduleForId.schedule.entry_time;
+      }
+    }
+
+    // 3) Fallback : pas d'heure d'entrée spécifique trouvée
+    return null;
+  };
+
   // Debug: Log when dialog state changes
   useEffect(() => {
     console.log("showAdminLoginDialog state:", showAdminLoginDialog);
@@ -930,6 +952,8 @@ function App() {
           : parseInt(formData.nbPersonne);
 
       // First create the booking
+      const entryTimeForBooking = getCurrentEntryTimeForBooking();
+
       const bookingData = {
         first_name: formData.firstName.trim(),
         last_name: formData.lastName.trim(),
@@ -938,6 +962,7 @@ function App() {
         booking_date: format(selectedDate, "yyyy-MM-dd"),
         day_of_week: selectedDayOfWeek,
         time_slot: selectedTimeSlot,
+        entry_time: entryTimeForBooking,
         payment_method: formData.paymentMethod,
         promo_code: formData.promoCode
           ? formData.promoCode.trim().toUpperCase()

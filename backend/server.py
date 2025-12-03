@@ -510,6 +510,8 @@ class TicketBooking(BaseModel):
     booking_date: date
     day_of_week: Union[DayOfWeek, str]  # Allow string for events
     time_slot: Union[TimeSlot, str]     # Allow string for events - identifiant du créneau (21h15, 23h45)
+    # Heure d'entrée effective au moment de la réservation (dénormalisée pour l'admin)
+    entry_time: Optional[str] = None
     payment_method: PaymentMethod
     price: float = 17.0
     final_price: Optional[float] = None  # Price after promo code discount
@@ -538,6 +540,8 @@ class TicketBookingCreate(BaseModel):
     payment_method: PaymentMethod
     promo_code: Optional[str] = None
     final_price: Optional[float] = None  # Price after promo code discount
+    # Permet au frontend d'envoyer directement l'heure d'entrée exacte
+    entry_time: Optional[str] = None
     nb_personne: int = 1
     # New fields for event booking flexibility
     content_type: Optional[str] = None  # 'movie' or 'event'
@@ -1451,13 +1455,37 @@ async def create_booking(booking_data: TicketBookingCreate):
             logging.info(f"Exception 24h pour réservation gratuite: {booking_data.first_name} {booking_data.last_name} - Prix final: {final_price}€")
         
         # Create booking object
-        # Note: entry_time et movie_title ne sont PAS sauvegardés dans bookings
-        # Ils sont récupérés via jointures avec movie_schedules/content_schedules et movies
-        # Jointure: bookings (booking_date, time_slot) -> movie_schedules/content_schedules -> movies
+        # Note: movie_title n'est PAS sauvegardé dans bookings (toujours via jointures),
+        # mais on stocke désormais entry_time pour refléter exactement l'heure d'entrée
+        # utilisée au moment de la réservation (utile côté admin).
         booking_dict = booking_data.dict()
         booking_dict["final_price"] = final_price
         if promo_discount_info:
             booking_dict["promo_discount_info"] = promo_discount_info
+        
+        # S'assurer que entry_time est renseigné :
+        # 1) Priorité à la valeur explicite envoyée par le frontend
+        # 2) Sinon, essayer de la récupérer depuis content_schedule / movie_schedule
+        # 3) Sinon, valeur par défaut basée sur time_slot via get_booking_details_from_schedules
+        if not booking_dict.get("entry_time"):
+            derived_entry_time = None
+            try:
+                # Essayer de dériver via les programmations existantes
+                booking_details = await get_booking_details_from_schedules(
+                    booking_data.booking_date,
+                    booking_data.time_slot,
+                    content_id=booking_dict.get("content_id"),
+                    content_type=booking_dict.get("content_type"),
+                )
+                derived_entry_time = booking_details.get("entry_time")
+            except Exception as e:
+                logging.warning(
+                    "⚠️ Impossible de dériver entry_time lors de la création de réservation: %s",
+                    str(e),
+                )
+
+            if derived_entry_time:
+                booking_dict["entry_time"] = derived_entry_time
         
         # Sauvegarder content_id et content_type si disponibles depuis le schedule trouvé
         if content_schedule:
@@ -4026,7 +4054,8 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
             if isinstance(booking_dict.get("checked_in_at"), datetime):
                 booking_dict["checked_in_at"] = booking_dict["checked_in_at"].isoformat()
             
-            booking_dict["entry_time"] = booking_details.get("entry_time")
+            # entry_time stocké en base a priorité, sinon on utilise celui dérivé
+            booking_dict["entry_time"] = booking_obj.entry_time or booking_details.get("entry_time")
             booking_dict["movie_title"] = booking_details.get("movie_title")
             
             enriched_recent_bookings.append(booking_dict)
@@ -4086,7 +4115,8 @@ async def get_all_admin_bookings(admin = Depends(get_admin_user)):
             if isinstance(booking_dict.get("checked_in_at"), datetime):
                 booking_dict["checked_in_at"] = booking_dict["checked_in_at"].isoformat()
             
-            booking_dict["entry_time"] = booking_details.get("entry_time")
+            # entry_time stocké en base a priorité, sinon on utilise celui dérivé
+            booking_dict["entry_time"] = booking_obj.entry_time or booking_details.get("entry_time")
             booking_dict["movie_title"] = booking_details.get("movie_title")
             
             # Log pour déboguer
