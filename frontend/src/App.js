@@ -98,6 +98,7 @@ import PopularMovies from "./components/PopularMovies";
 import WeeklyMoviesCarousel from "./components/WeeklyMoviesCarousel";
 import EventsDisplay from "./components/EventsDisplay";
 import MovieSuggestionModal from "./components/MovieSuggestionModal";
+import { Analytics } from "@vercel/analytics/react";
 
 const BACKEND_URL =
   process.env.REACT_APP_BACKEND_URL?.replace(/\/+$/, "") || "";
@@ -1483,7 +1484,6 @@ function App() {
             </div>
           </DialogContent>
         </Dialog>
-
         <div
           className={`min-h-screen ${
             isHalloween
@@ -3215,6 +3215,7 @@ function App() {
           </div>
         </DialogContent>
       </Dialog>
+      <Analytics />
     </>
   );
 }
