@@ -3881,7 +3881,8 @@ async def get_booking_details_from_schedules(
     # Si on a movie_title en paramètre, chercher tous les schedules et trouver celui qui correspond
     # Utiliser le paramètre movie_title si fourni, sinon utiliser movie_title_result
     search_movie_title = movie_title if movie_title else movie_title_result
-    if search_movie_title and not entry_time:
+    # Rechercher par movie_title si entry_time n'est pas trouvé OU si c'est la valeur par défaut suspecte "17h45"
+    if search_movie_title and (not entry_time or entry_time == "17h45"):
         # Chercher tous les schedules pour cette date + time_slot
         all_schedules = await db.content_schedules.find({
             "date": booking_date_str,
@@ -3981,7 +3982,34 @@ async def get_booking_details_from_schedules(
         logging.info(f"⚠️ Aucun content_schedule trouvé pour date={booking_date_str}, time_slot={normalized_time_slot or time_slot_str}")
     
     # Si pas trouvé dans content_schedules, chercher dans movie_schedules legacy
-    if not entry_time or not movie_title:
+    # Si on a search_movie_title, chercher tous les movie_schedules et trouver celui qui correspond
+    if search_movie_title and (not entry_time or entry_time == "17h45"):
+        # Chercher tous les movie_schedules pour cette date + time_slot
+        all_movie_schedules = await db.movie_schedules.find({
+            "date": booking_date_str,
+            "time_slot": {"$in": [normalized_time_slot, time_slot_str]},
+            "is_active": True
+        }).to_list(100)
+        
+        if not all_movie_schedules:
+            all_movie_schedules = await db.movie_schedules.find({
+                "date": booking_date_str,
+                "time_slot": {"$in": [normalized_time_slot, time_slot_str]}
+            }).to_list(100)
+        
+        # Pour chaque schedule, vérifier si le titre correspond
+        for schedule in all_movie_schedules:
+            movie_id = schedule.get("movie_id")
+            if movie_id:
+                movie = await db.movies.find_one({"id": movie_id})
+                if movie and movie.get("title") == search_movie_title:
+                    entry_time = schedule.get("entry_time")
+                    movie_title_result = movie.get("title")
+                    logging.info(f"✅ movie_schedule trouvé via movie_title '{search_movie_title}': entry_time={entry_time}")
+                    break
+    
+    # Si toujours pas trouvé, chercher normalement (sans filtre par movie_title)
+    if not entry_time or not movie_title_result:
         movie_schedule = await db.movie_schedules.find_one({
             "date": booking_date_str,
             "time_slot": {"$in": [normalized_time_slot, time_slot_str]},
@@ -4166,17 +4194,26 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
             
             # Si on n'a pas entry_time stocké mais qu'on a movie_title, réessayer avec movie_title comme filtre
             # pour trouver le bon schedule (utile pour les anciennes réservations)
-            if not booking_obj.entry_time and booking_details.get("movie_title"):
+            # TOUJOURS réessayer si entry_time est 17h45 (valeur par défaut suspecte) ou manquant
+            movie_title_from_details = booking_details.get("movie_title")
+            if movie_title_from_details and (not booking_obj.entry_time or booking_details.get("entry_time") == "17h45"):
+                logging.info(f"🔍 Tentative de correction entry_time pour réservation {booking_obj.id} avec movie_title: {movie_title_from_details}")
                 booking_details_with_title = await get_booking_details_from_schedules(
                     booking_obj.booking_date,
                     booking_obj.time_slot,
                     booking_obj.content_id,
                     booking_obj.content_type,
-                    booking_details.get("movie_title")
+                    movie_title_from_details
                 )
-                # Utiliser entry_time de la deuxième passe si meilleur
-                if booking_details_with_title.get("entry_time") and booking_details_with_title.get("entry_time") != "17h45":
-                    booking_details["entry_time"] = booking_details_with_title.get("entry_time")
+                # Utiliser entry_time de la deuxième passe si différent de 17h45 ou meilleur
+                new_entry_time = booking_details_with_title.get("entry_time")
+                if new_entry_time and new_entry_time != "17h45":
+                    booking_details["entry_time"] = new_entry_time
+                    logging.info(f"✅ Réservation {booking_obj.id} - entry_time corrigé via movie_title: {new_entry_time} (était: {booking_details.get('entry_time')})")
+                elif new_entry_time and booking_details.get("entry_time") == "17h45":
+                    # Même si c'est toujours 17h45, on l'utilise car c'est le résultat de la recherche précise
+                    booking_details["entry_time"] = new_entry_time
+                    logging.info(f"⚠️ Réservation {booking_obj.id} - entry_time reste 17h45 après recherche précise")
             
             # Ajouter entry_time et movie_title au dictionnaire de réponse
             booking_dict = booking_obj.dict()
@@ -4247,18 +4284,26 @@ async def get_all_admin_bookings(admin = Depends(get_admin_user)):
             
             # Si on n'a pas entry_time stocké mais qu'on a movie_title, réessayer avec movie_title comme filtre
             # pour trouver le bon schedule (utile pour les anciennes réservations)
-            if not booking_obj.entry_time and booking_details.get("movie_title"):
+            # TOUJOURS réessayer si entry_time est 17h45 (valeur par défaut suspecte) ou manquant
+            movie_title_from_details = booking_details.get("movie_title")
+            if movie_title_from_details and (not booking_obj.entry_time or booking_details.get("entry_time") == "17h45"):
+                logging.info(f"🔍 Tentative de correction entry_time pour réservation {booking_obj.id} avec movie_title: {movie_title_from_details}")
                 booking_details_with_title = await get_booking_details_from_schedules(
                     booking_obj.booking_date,
                     booking_obj.time_slot,
                     booking_obj.content_id,
                     booking_obj.content_type,
-                    booking_details.get("movie_title")
+                    movie_title_from_details
                 )
-                # Utiliser entry_time de la deuxième passe si meilleur
-                if booking_details_with_title.get("entry_time") and booking_details_with_title.get("entry_time") != "17h45":
-                    booking_details["entry_time"] = booking_details_with_title.get("entry_time")
-                    logging.info(f"✅ Réservation {booking_obj.id} - entry_time corrigé via movie_title: {booking_details['entry_time']}")
+                # Utiliser entry_time de la deuxième passe si différent de 17h45 ou meilleur
+                new_entry_time = booking_details_with_title.get("entry_time")
+                if new_entry_time and new_entry_time != "17h45":
+                    booking_details["entry_time"] = new_entry_time
+                    logging.info(f"✅ Réservation {booking_obj.id} - entry_time corrigé via movie_title: {new_entry_time} (était: {booking_details.get('entry_time')})")
+                elif new_entry_time and booking_details.get("entry_time") == "17h45":
+                    # Même si c'est toujours 17h45, on l'utilise car c'est le résultat de la recherche précise
+                    booking_details["entry_time"] = new_entry_time
+                    logging.info(f"⚠️ Réservation {booking_obj.id} - entry_time reste 17h45 après recherche précise")
             
             # Ajouter entry_time et movie_title au dictionnaire de réponse
             booking_dict = booking_obj.dict()
