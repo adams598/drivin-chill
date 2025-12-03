@@ -3725,7 +3725,8 @@ async def get_booking_details_from_schedules(
     entry_time = None
     movie_title = None
     
-    # Si content_id et content_type sont disponibles, utiliser directement pour récupérer le titre
+    # Si content_id et content_type sont disponibles, utiliser directement pour récupérer
+    # le titre ET tenter une jointure plus précise avec content_schedules
     if content_id and content_type:
         if content_type == "movie":
             # Chercher d'abord avec is_active=True, puis sans cette condition
@@ -3747,8 +3748,33 @@ async def get_booking_details_from_schedules(
                 logging.info(f"✅ Événement trouvé directement via content_id: {movie_title}")
             else:
                 logging.warning(f"⚠️ Événement non trouvé avec content_id={content_id}")
-    
-    # Chercher dans content_schedules d'abord (nouveau système)
+
+        # Tentative 1 : récupérer d'abord le content_schedule correspondant exactement
+        # au couple (date, content_id, content_type). Cela permet d'avoir un entry_time
+        # spécifique par film même si plusieurs films partagent le même time_slot.
+        precise_content_schedule = await db.content_schedules.find_one({
+            "date": booking_date_str,
+            "content_id": content_id,
+            "content_type": content_type,
+            "is_active": True,
+        })
+        if not precise_content_schedule:
+            precise_content_schedule = await db.content_schedules.find_one({
+                "date": booking_date_str,
+                "content_id": content_id,
+                "content_type": content_type,
+            })
+
+        if precise_content_schedule:
+            logging.info(
+                "✅ content_schedule précis trouvé pour content_id=%s, type=%s",
+                content_id,
+                content_type,
+            )
+            entry_time = precise_content_schedule.get("entry_time") or entry_time
+
+    # Chercher dans content_schedules d'abord (nouveau système) si on n'a pas encore
+    # trouvé d'entry_time via la jointure précise ci‑dessus.
     # Essayer avec le time_slot normalisé, puis avec l'original
     content_schedule = await db.content_schedules.find_one({
         "date": booking_date_str,
