@@ -896,25 +896,30 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
         )
         
         # Si on n'a pas entry_time stocké mais qu'on a movie_title, réessayer avec movie_title comme filtre
-        if not booking.entry_time and booking_details.get("movie_title"):
+        # TOUJOURS réessayer si entry_time est 17h45 (valeur par défaut suspecte) ou manquant
+        movie_title_from_details = booking_details.get("movie_title")
+        if movie_title_from_details and (not booking.entry_time or booking_details.get("entry_time") == "17h45"):
+            logging.info(f"📧 Tentative de correction horaires pour réservation {booking.id} avec movie_title: {movie_title_from_details}")
             booking_details_with_title = await get_booking_details_from_schedules(
                 booking.booking_date,
                 booking.time_slot,
                 booking.content_id,
                 booking.content_type,
-                booking_details.get("movie_title")
+                movie_title_from_details
             )
             # Utiliser entry_time de la deuxième passe si meilleur
-            if booking_details_with_title.get("entry_time") and booking_details_with_title.get("entry_time") != "17h45":
-                booking_details["entry_time"] = booking_details_with_title.get("entry_time")
+            new_entry_time = booking_details_with_title.get("entry_time")
+            if new_entry_time and new_entry_time != "17h45":
+                booking_details["entry_time"] = new_entry_time
+                logging.info(f"📧 entry_time corrigé via movie_title: {new_entry_time}")
         
         entry_time = booking.entry_time or booking_details.get("entry_time")
-        movie_title = booking_details.get("movie_title") or movie_title
+        movie_title = movie_title_from_details or movie_title
         
         logging.info(f"📧 Horaires récupérés: entry={entry_time}, movie_title={movie_title}")
         
         # Maintenant récupérer start_time et end_time depuis le bon schedule
-        # Chercher dans content_schedules d'abord (nouveau système)
+        # Utiliser la même logique que pour entry_time : chercher avec movie_title si disponible
         content_schedule = None
         if booking.content_id and booking.content_type:
             # Chercher le schedule précis via content_id
@@ -931,7 +936,7 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
                     "content_type": booking.content_type
                 })
         
-        # Si pas trouvé, chercher par time_slot et movie_title si disponible
+        # Si pas trouvé, chercher par time_slot et movie_title si disponible (même logique que pour entry_time)
         if not content_schedule and movie_title:
             all_schedules = await db.content_schedules.find({
                 "date": booking_date_str,
@@ -982,22 +987,49 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
             logging.info(f"📧 Horaires depuis content_schedule: entry={entry_time}, start={start_time}, end={end_time}")
         else:
             # Fallback : chercher dans movie_schedules legacy
-            schedule = await db.movie_schedules.find_one({
-                "date": booking_date_str,
-                "time_slot": time_slot_str,
-                "is_active": True
-            })
+            # Si on a movie_title, chercher tous les schedules et trouver celui qui correspond
+            schedule = None
+            if movie_title:
+                all_movie_schedules = await db.movie_schedules.find({
+                    "date": booking_date_str,
+                    "time_slot": time_slot_str,
+                    "is_active": True
+                }).to_list(100)
+                
+                if not all_movie_schedules:
+                    all_movie_schedules = await db.movie_schedules.find({
+                        "date": booking_date_str,
+                        "time_slot": time_slot_str
+                    }).to_list(100)
+                
+                # Pour chaque schedule, vérifier si le titre correspond
+                for sched in all_movie_schedules:
+                    movie_id = sched.get("movie_id")
+                    if movie_id:
+                        movie = await db.movies.find_one({"id": movie_id})
+                        if movie and movie.get("title") == movie_title:
+                            schedule = sched
+                            logging.info(f"📧 movie_schedule trouvé via movie_title '{movie_title}'")
+                            break
+            
+            # Si toujours pas trouvé, chercher normalement
             if not schedule:
                 schedule = await db.movie_schedules.find_one({
                     "date": booking_date_str,
-                    "time_slot": time_slot_str
+                    "time_slot": time_slot_str,
+                    "is_active": True
                 })
+                if not schedule:
+                    schedule = await db.movie_schedules.find_one({
+                        "date": booking_date_str,
+                        "time_slot": time_slot_str
+                    })
             
             if schedule:
                 entry_time = entry_time or schedule.get("entry_time")
                 start_time = schedule.get("start_time")
                 end_time = schedule.get("end_time")
-                logging.info(f"📧 Horaires depuis movie_schedule legacy: entry={entry_time}, start={start_time}, end={end_time}")
+                logging.info(f"📧 Horaires depuis movie_schedule: entry={entry_time}, start={start_time}, end={end_time}")
         
         # Si les horaires ne sont pas dans le schedule, utiliser TimeSlotSettings comme fallback
         if not entry_time or not start_time or not end_time:
@@ -1072,12 +1104,18 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
                         promo_value = promo_code_doc.get("value", 0)
                         discount_amount = (booking.price * promo_value) / 100
                     
+                    # Calculer le prix final : prix initial - réduction (ne peut pas être négatif)
+                    calculated_final_price = max(0, booking.price - discount_amount)
+                    # Utiliser booking_final_price si disponible et différent, sinon utiliser le calcul
+                    final_price_to_use = booking_final_price if booking_final_price is not None and booking_final_price != booking.price else calculated_final_price
+                    
                     promo_info = {
                         "code": booking_promo_code,
                         "type": "reduction",
                         "discount_amount": round(discount_amount, 2),
-                        "final_price": round(booking_final_price, 2)
+                        "final_price": round(final_price_to_use, 2)
                     }
+                    logging.info(f"📧 Code promo calculé: discount={discount_amount}, prix initial={booking.price}, prix final={final_price_to_use}")
                 elif promo_type == "free_benefit":
                     benefit_desc = promo_code_doc.get("benefit_description", "")
                     promo_info = {
@@ -1174,7 +1212,7 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
                     <h3>📋 Détails de votre réservation</h3>
                     <p><strong>ID de réservation :</strong> {booking.id}</p>
                     <p><strong>Date :</strong> {booking.booking_date}</p>
-                    <p><strong>Créneau :</strong> {booking.time_slot}</p>
+                    <p><strong>Créneau :</strong> {entry_time_formatted}</p>
                     <p><strong>Film :</strong> {movie_title}</p>
                     <hr style="border: none; border-top: 1px solid #ddd; margin: 15px 0;">
                     <h4 style="margin: 15px 0 10px 0; color: #667eea;">⏰ Horaires</h4>
