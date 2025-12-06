@@ -549,7 +549,7 @@ function App() {
     setPreFillData({
       date: bookingData.selectedDate,
       timeSlot: bookingData.selectedTimeSlot,
-      movie: bookingData.selectedMovie,
+      movie: bookingData.selectedMovie, // Store the full movie object
       movieTitle: bookingData.selectedMovie.title,
       isEvent: bookingData.isEvent || false,
       schedule: bookingData.schedule || null, // Inclure le schedule complet pour les horaires réels
@@ -727,6 +727,36 @@ function App() {
         `${API}/movie-schedules/by-date/${dateString}`
       );
       const schedules = response.data || [];
+      
+      // If we have pre-filled data and the schedule is not in the fetched schedules,
+      // add it to the list so it can be displayed correctly
+      if (isPreFilled && preFillData && preFillData.schedule && preFillData.movie) {
+        const preFilledScheduleExists = schedules.some(
+          (s) => s.schedule.time_slot === preFillData.timeSlot &&
+                 s.movie?.id === preFillData.movie.id
+        );
+        
+        if (!preFilledScheduleExists && preFillData.schedule) {
+          // Create a schedule object in the same format as the API response
+          const preFilledSchedule = {
+            schedule: {
+              id: preFillData.schedule.id || preFillData.timeSlot,
+              movie_id: preFillData.movie.id,
+              date: preFillData.date,
+              time_slot: preFillData.timeSlot,
+              capacity: preFillData.schedule.capacity || 21,
+              entry_time: preFillData.schedule.entry_time,
+              start_time: preFillData.schedule.start_time,
+              end_time: preFillData.schedule.end_time,
+              is_active: true,
+            },
+            movie: preFillData.movie,
+          };
+          // Add the pre-filled schedule at the beginning of the list
+          schedules.unshift(preFilledSchedule);
+        }
+      }
+      
       setMovieSchedules(schedules);
 
       // Verify that the currently selected time slot is still valid
@@ -2232,13 +2262,13 @@ function App() {
                                 <div className="font-medium">
                                   {preFillData.schedule?.entry_time &&
                                   preFillData.schedule?.start_time
-                                    ? `Entrée: ${preFillData.schedule.entry_time} • Début: ${preFillData.schedule.start_time}`
+                                    ? `Entrée: ${preFillData.schedule.entry_time} • Début: ${preFillData.schedule.start_time}${preFillData.schedule.end_time ? ` • Fin: ${preFillData.schedule.end_time}` : ''}`
                                     : getTimeSlotDisplay(preFillData.timeSlot)}
                                 </div>
                                 <div className="text-sm text-gray-300">
                                   {preFillData.schedule?.entry_time &&
                                   preFillData.schedule?.start_time
-                                    ? `Film à ${preFillData.schedule.start_time}`
+                                    ? `Film à ${preFillData.schedule.start_time}${preFillData.schedule.end_time ? ` • Fin: ${preFillData.schedule.end_time}` : ''}`
                                     : isHalloween
                                     ? mapTimeSlotToHalloween(
                                         preFillData.timeSlot
@@ -2250,7 +2280,11 @@ function App() {
                                   preFillData.schedule?.start_time
                                     ? `Capacité: ${
                                         preFillData.schedule.capacity || 21
-                                      } places`
+                                      } places${
+                                        preFillData.movie?.duration_minutes
+                                          ? ` • Durée: ${preFillData.movie.duration_minutes} min`
+                                          : ""
+                                      }`
                                     : getTimeSlots().find(
                                         (slot) =>
                                           slot.value === preFillData.timeSlot
@@ -2295,14 +2329,26 @@ function App() {
                   preFillData &&
                   (() => {
                     // Déterminer l'heure à afficher pour le créneau
+                    // Priorité aux informations spécifiques du schedule
                     let displayTimeSlot = preFillData.timeSlot;
-                    if (
-                      preFillData.schedule?.entry_time &&
-                      preFillData.schedule?.start_time
-                    ) {
-                      displayTimeSlot = `Entrée: ${preFillData.schedule.entry_time} • Début: ${preFillData.schedule.start_time}`;
-                    } else if (preFillData.schedule?.start_time) {
-                      displayTimeSlot = `Début: ${preFillData.schedule.start_time}`;
+                    let displayCreneau = preFillData.timeSlot;
+                    
+                    if (preFillData.schedule) {
+                      // Utiliser les informations spécifiques du schedule si disponibles
+                      if (
+                        preFillData.schedule.entry_time &&
+                        preFillData.schedule.start_time
+                      ) {
+                        displayTimeSlot = `Entrée: ${preFillData.schedule.entry_time} • Début: ${preFillData.schedule.start_time}${preFillData.schedule.end_time ? ` • Fin: ${preFillData.schedule.end_time}` : ''}`;
+                        displayCreneau = preFillData.schedule.start_time;
+                      } else if (preFillData.schedule.start_time) {
+                        displayTimeSlot = `Début: ${preFillData.schedule.start_time}${preFillData.schedule.end_time ? ` • Fin: ${preFillData.schedule.end_time}` : ''}`;
+                        displayCreneau = preFillData.schedule.start_time;
+                      } else if (preFillData.schedule.custom_time) {
+                        // Pour les événements avec custom_time
+                        displayTimeSlot = `Début: ${preFillData.schedule.custom_time}`;
+                        displayCreneau = preFillData.schedule.custom_time;
+                      }
                     }
 
                     return (
@@ -2320,7 +2366,10 @@ function App() {
                               locale: fr,
                             }
                           )}{" "}
-                          • Créneau: {preFillData.schedule.start_time}
+                          • Créneau: {displayCreneau}
+                          {preFillData.schedule?.capacity && (
+                            <span> • Capacité: {preFillData.schedule.capacity} places</span>
+                          )}
                         </p>
                       </div>
                     );
