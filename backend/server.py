@@ -3944,37 +3944,37 @@ async def get_booking_details_from_schedules(
         # Récupérer entry_time, start_time et end_time depuis content_schedule
         # (seulement si on ne les a pas déjà depuis movie_schedule)
         if not entry_time:
-        entry_time = content_schedule.get("entry_time")
+            entry_time = content_schedule.get("entry_time")
         if not start_time:
-        start_time = content_schedule.get("start_time")
+            start_time = content_schedule.get("start_time")
         if not end_time:
             end_time = content_schedule.get("end_time")
         
         # Récupérer le titre du film/événement via content_id (seulement si on ne l'a pas déjà)
         if not movie_title:
-        schedule_content_type = content_schedule.get("content_type", "movie")
-        schedule_content_id = content_schedule.get("content_id")
-        
-        if schedule_content_type == "movie" and schedule_content_id:
-            # Jointure avec movies via content_id
-            movie = await db.movies.find_one({"id": schedule_content_id, "is_active": True})
-            if not movie:
-                movie = await db.movies.find_one({"id": schedule_content_id})
-            if movie:
-                movie_title = movie.get("title")
-                logging.info(f"✅ Film trouvé via content_schedule: {movie_title}")
-            else:
-                logging.warning(f"⚠️ Film non trouvé avec content_id={schedule_content_id} depuis content_schedule")
-        elif schedule_content_type == "event" and schedule_content_id:
-            # Jointure avec events via content_id
-            event = await db.events.find_one({"id": schedule_content_id, "is_active": True})
-            if not event:
-                event = await db.events.find_one({"id": schedule_content_id})
-            if event:
-                movie_title = event.get("title")
-                logging.info(f"✅ Événement trouvé via content_schedule: {movie_title}")
-            else:
-                logging.warning(f"⚠️ Événement non trouvé avec content_id={schedule_content_id} depuis content_schedule")
+            schedule_content_type = content_schedule.get("content_type", "movie")
+            schedule_content_id = content_schedule.get("content_id")
+            
+            if schedule_content_type == "movie" and schedule_content_id:
+                # Jointure avec movies via content_id
+                movie = await db.movies.find_one({"id": schedule_content_id, "is_active": True})
+                if not movie:
+                    movie = await db.movies.find_one({"id": schedule_content_id})
+                if movie:
+                    movie_title = movie.get("title")
+                    logging.info(f"✅ Film trouvé via content_schedule: {movie_title}")
+                else:
+                    logging.warning(f"⚠️ Film non trouvé avec content_id={schedule_content_id} depuis content_schedule")
+            elif schedule_content_type == "event" and schedule_content_id:
+                # Jointure avec events via content_id
+                event = await db.events.find_one({"id": schedule_content_id, "is_active": True})
+                if not event:
+                    event = await db.events.find_one({"id": schedule_content_id})
+                if event:
+                    movie_title = event.get("title")
+                    logging.info(f"✅ Événement trouvé via content_schedule: {movie_title}")
+                else:
+                    logging.warning(f"⚠️ Événement non trouvé avec content_id={schedule_content_id} depuis content_schedule")
         
         # Si entry_time ou start_time n'est toujours pas dans content_schedule, chercher dans movie_schedules legacy
         if not entry_time or not start_time:
