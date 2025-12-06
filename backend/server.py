@@ -3839,10 +3839,55 @@ async def get_booking_details_from_schedules(
     
     entry_time = None
     start_time = None
+    end_time = None
     movie_title = None
     
+    # PRIORITÉ : Chercher d'abord dans movie_schedules (legacy) car c'est là que sont stockées
+    # les informations spécifiques de chaque réservation (entry_time, start_time, end_time)
+    movie_schedule = None
+    for date_var in date_variants:
+        movie_schedule = await db.movie_schedules.find_one({
+            "date": date_var,
+            "time_slot": {"$in": [normalized_time_slot, time_slot_str]},
+            "is_active": True
+        })
+        if movie_schedule:
+            logging.info(f"✅ Trouvé movie_schedule avec date={date_var}")
+            break
+    
+    # Si pas trouvé avec is_active=True, chercher sans cette condition
+    if not movie_schedule:
+        for date_var in date_variants:
+            movie_schedule = await db.movie_schedules.find_one({
+                "date": date_var,
+                "time_slot": {"$in": [normalized_time_slot, time_slot_str]}
+            })
+            if movie_schedule:
+                logging.info(f"✅ Trouvé movie_schedule (inactif) avec date={date_var}")
+                break
+    
+    if movie_schedule:
+        logging.info(f"✅ Trouvé movie_schedule: movie_id={movie_schedule.get('movie_id')}, date={movie_schedule.get('date')}, time_slot={movie_schedule.get('time_slot')}")
+        # Récupérer entry_time, start_time et end_time depuis movie_schedule
+        entry_time = movie_schedule.get("entry_time")
+        start_time = movie_schedule.get("start_time")
+        end_time = movie_schedule.get("end_time")
+        
+        # Récupérer le titre du film via movie_id
+        movie_id = movie_schedule.get("movie_id")
+        if movie_id:
+            movie = await db.movies.find_one({"id": movie_id, "is_active": True})
+            if not movie:
+                movie = await db.movies.find_one({"id": movie_id})
+            if movie:
+                movie_title = movie.get("title")
+                logging.info(f"✅ Film trouvé via movie_schedule: {movie_title}")
+            else:
+                logging.warning(f"⚠️ Film non trouvé avec movie_id={movie_id} depuis movie_schedule")
+    
     # Si content_id et content_type sont disponibles, utiliser directement pour récupérer le titre
-    if content_id and content_type:
+    # (seulement si on n'a pas déjà trouvé le titre via movie_schedule)
+    if not movie_title and content_id and content_type:
         if content_type == "movie":
             # Chercher d'abord avec is_active=True, puis sans cette condition
             movie = await db.movies.find_one({"id": content_id, "is_active": True})
@@ -3864,7 +3909,7 @@ async def get_booking_details_from_schedules(
             else:
                 logging.warning(f"⚠️ Événement non trouvé avec content_id={content_id}")
     
-    # Chercher dans content_schedules d'abord (nouveau système)
+    # Chercher dans content_schedules en fallback (nouveau système)
     # Essayer avec le time_slot normalisé, puis avec l'original
     # Essayer aussi avec différents formats de date
     date_variants = [booking_date_str]
@@ -4138,6 +4183,7 @@ async def get_booking_details_from_schedules(
     return {
         "entry_time": entry_time,
         "start_time": start_time,
+        "end_time": end_time,
         "movie_title": movie_title
     }
 
@@ -4257,9 +4303,11 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
                 booking_obj.content_type
             )
             
-            # Ajouter entry_time et movie_title au dictionnaire de réponse
+            # Ajouter entry_time, start_time, end_time et movie_title au dictionnaire de réponse
             booking_dict = booking_obj.dict()
             booking_dict["entry_time"] = booking_details.get("entry_time")
+            booking_dict["start_time"] = booking_details.get("start_time")
+            booking_dict["end_time"] = booking_details.get("end_time")
             booking_dict["movie_title"] = booking_details.get("movie_title")
             
             enriched_recent_bookings.append(booking_dict)
@@ -4316,9 +4364,12 @@ async def get_all_admin_bookings(admin = Depends(get_admin_user)):
             
             booking_dict["entry_time"] = entry_time_result
             booking_dict["movie_title"] = movie_title_result
+            # Ajouter aussi start_time et end_time pour avoir toutes les informations
+            booking_dict["start_time"] = booking_details.get("start_time")
+            booking_dict["end_time"] = booking_details.get("end_time")
             
             # Log pour déboguer
-            logging.info(f"📋 Réservation {booking_obj.id} ({booking_obj.first_name} {booking_obj.last_name}) - entry_time={entry_time_result}, movie_title={movie_title_result}, content_id={booking_obj.content_id}, content_type={booking_obj.content_type}, date={booking_obj.booking_date}, time_slot={booking_obj.time_slot}")
+            logging.info(f"📋 Réservation {booking_obj.id} ({booking_obj.first_name} {booking_obj.last_name}) - entry_time={entry_time_result}, start_time={booking_dict.get('start_time')}, end_time={booking_dict.get('end_time')}, movie_title={movie_title_result}, content_id={booking_obj.content_id}, content_type={booking_obj.content_type}, date={booking_obj.booking_date}, time_slot={booking_obj.time_slot}")
             
             if not movie_title_result:
                 logging.warning(f"⚠️ Réservation {booking_obj.id} ({booking_obj.first_name} {booking_obj.last_name}) - Pas de titre trouvé. content_id={booking_obj.content_id}, content_type={booking_obj.content_type}, date={booking_obj.booking_date}, time_slot={booking_obj.time_slot}")
