@@ -114,12 +114,12 @@ def get_mongodb_client():
     # Créer une nouvelle connexion seulement si elle n'existe pas
     if is_production:
         # En production (Vercel/serverless), utiliser des timeouts plus courts
-        server_selection_timeout = 10000  # 10 secondes
+        server_selection_timeout = 50000  # 10 secondes
         connect_timeout = 10000
         socket_timeout = 30000  # 30 secondes pour les opérations longues
     else:
         # En développement, timeouts plus longs
-        server_selection_timeout = 30000
+        server_selection_timeout = 60000
         connect_timeout = 30000
         socket_timeout = 30000
 
@@ -3342,7 +3342,7 @@ async def create_movie_schedule(schedule_data: MovieScheduleCreate, admin = Depe
                 if existing_content.get("time_slot") == schedule_data.time_slot:
                     raise HTTPException(
                         status_code=400,
-                        detail="Un contenu est déjà programmé à ce créneau horaire"
+                        detail="Un contenu est déjà programmé à ce créneau horaire !"
                     )
         else:
             # Si pas d'horaires personnalisés, vérifier comme avant (même time_slot = conflit)
