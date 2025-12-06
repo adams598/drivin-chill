@@ -676,6 +676,40 @@ class AvailabilityCheck(BaseModel):
     time_slot: TimeSlot
 
 # Admin authentication (simple token-based)
+# ⚠️ CRUCIAL pour Vercel : Dépendance FastAPI pour garantir la connexion MongoDB
+# Cette fonction est appelée avant chaque route qui en a besoin
+# Elle garantit que le client MongoDB est connecté et réutilisé
+async def ensure_mongodb_connection():
+    """
+    Dépendance FastAPI pour garantir la connexion MongoDB - CRUCIAL pour Vercel serverless
+    Similaire à connectDB() dans l'exemple Node.js
+    Garantit qu'une seule connexion est créée et réutilisée
+    """
+    global client, db
+    
+    # Si le client existe déjà et est connecté, le réutiliser
+    if client is not None and db is not None:
+        try:
+            # Vérifier rapidement si la connexion est toujours active (ping rapide)
+            await asyncio.wait_for(client.admin.command('ping'), timeout=2.0)
+            return db
+        except Exception:
+            # Connexion perdue, réinitialiser
+            logging.warning("⚠️  Connexion MongoDB perdue, réinitialisation...")
+            client = None
+            db = None
+    
+    # Créer ou récupérer le client MongoDB (singleton)
+    try:
+        client, db = get_mongodb_client()
+        return db
+    except Exception as e:
+        logging.error(f"❌ Impossible de connecter à MongoDB : {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="Base de données MongoDB non disponible. Veuillez réessayer dans quelques instants."
+        )
+
 async def get_admin_user(credentials = Depends(security)):
     admin_token = os.environ.get('ADMIN_TOKEN', 'admin_token_2024')  # Fallback for development
     if not credentials or credentials.credentials != admin_token:
@@ -1495,7 +1529,10 @@ async def root():
     return {"message": "Bienvenue sur la billetterie Drivin And Chill"}
 
 @api_router.post("/bookings", response_model=TicketBooking)
-async def create_booking(booking_data: TicketBookingCreate):
+async def create_booking(
+    booking_data: TicketBookingCreate,
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         # Initialize content_schedule
         content_schedule = None
@@ -2512,13 +2549,12 @@ async def validate_promo_code(validation_data: PromoCodeValidation):
 
 # Movie management endpoints
 @api_router.post("/movies", response_model=Movie)
-async def create_movie(movie_data: MovieCreate, admin = Depends(get_admin_user)):
-    # Vérifier la connexion MongoDB
-    if not await check_mongodb_connection():
-        raise HTTPException(
-            status_code=503,
-            detail="Base de données MongoDB non disponible. Vérifiez votre connexion et votre fichier .env"
-        )
+async def create_movie(
+    movie_data: MovieCreate, 
+    admin = Depends(get_admin_user),
+    db = Depends(ensure_mongodb_connection)
+):
+    # db est directement retourné par ensure_mongodb_connection()
     
     try:
         movie_obj = Movie(**movie_data.dict())
@@ -2533,11 +2569,11 @@ async def create_movie(movie_data: MovieCreate, admin = Depends(get_admin_user))
         raise HTTPException(status_code=500, detail=f"Erreur lors de la création du film: {str(e)}")
 
 @api_router.get("/movies", response_model=List[Movie])
-async def get_movies(active_only: bool = True):
-    # Vérifier la connexion MongoDB
-    if not await check_mongodb_connection():
-        logging.warning("⚠️  MongoDB non disponible - retour d'une liste vide pour les films")
-        return []
+async def get_movies(
+    active_only: bool = True,
+    db = Depends(ensure_mongodb_connection)
+):
+    # db est directement retourné par ensure_mongodb_connection()
     
     try:
         filter_query = {"is_active": True} if active_only else {}

@@ -73,6 +73,20 @@
                                     ".i.posthog.com",
                                     "-assets.i.posthog.com",
                                 ) + "/static/array.js"),
+                            // Gérer les erreurs de chargement du script
+                            (p.onerror = function() {
+                                console.warn('PostHog: Erreur de chargement du script (bloqué ou réseau)');
+                                // Créer un stub pour éviter les erreurs
+                                if (!window.posthog || !window.posthog._isIdentified) {
+                                    window.posthog = window.posthog || {
+                                        capture: function() {},
+                                        identify: function() {},
+                                        reset: function() {},
+                                        isFeatureEnabled: function() { return false; },
+                                        _isIdentified: false
+                                    };
+                                }
+                            }),
                             (r =
                                 t.getElementsByTagName(
                                     "script",
@@ -105,9 +119,73 @@
                     }),
                     (e.__SV = 1));
             })(document, window.posthog || []);
-            posthog.init("phc_yJW1VjHGGwmCbbrtczfqqNxgBDbhlhOWcdzcIJEOTFE", {
-                api_host: "https://us.i.posthog.com",
-                person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well
+            // Initialiser PostHog avec gestion d'erreurs
+            try {
+                posthog.init("phc_yJW1VjHGGwmCbbrtczfqqNxgBDbhlhOWcdzcIJEOTFE", {
+                    api_host: "https://us.i.posthog.com",
+                    person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well
+                    // Désactiver le stockage local si IndexedDB est plein
+                    disable_session_recording: false,
+                    // Gérer les erreurs de stockage
+                    persistence: 'localStorage+cookie', // Fallback si IndexedDB échoue
+                    // Ignorer les erreurs de chargement
+                    loaded: function(posthog) {
+                        // PostHog chargé avec succès
+                        console.log('PostHog initialisé');
+                    }
+                });
+            } catch (error) {
+                // PostHog bloqué ou erreur d'initialisation - continuer sans analytics
+                console.warn('PostHog non disponible (bloqué ou erreur):', error);
+                // Créer un stub pour éviter les erreurs dans le code
+                window.posthog = {
+                    capture: function() {},
+                    identify: function() {},
+                    reset: function() {},
+                    isFeatureEnabled: function() { return false; }
+                };
+            }
+            
+            // Gérer les erreurs de stockage local (IndexedDB/LocalStorage)
+            try {
+                localStorage.setItem('__posthog_test__', 'test');
+                localStorage.removeItem('__posthog_test__');
+            } catch (e) {
+                // Stockage local plein ou indisponible
+                console.warn('Stockage local indisponible, PostHog utilisera uniquement les cookies');
+                if (window.posthog && window.posthog.config) {
+                    window.posthog.config.persistence = 'cookie';
+                }
+            }
+            
+            // Gérer les erreurs non capturées de PostHog (IndexedDB plein, etc.)
+            window.addEventListener('error', function(event) {
+                if (event.message && (
+                    event.message.includes('FILE_ERROR_NO_SPACE') ||
+                    event.message.includes('posthog') ||
+                    event.message.includes('IndexedDB')
+                )) {
+                    // Erreur liée à PostHog ou au stockage - ne pas bloquer l'application
+                    console.warn('Erreur PostHog/stockage ignorée:', event.message);
+                    event.preventDefault();
+                    return false;
+                }
+            }, true);
+            
+            // Gérer les promesses rejetées non gérées
+            window.addEventListener('unhandledrejection', function(event) {
+                if (event.reason && (
+                    event.reason.message && (
+                        event.reason.message.includes('FILE_ERROR_NO_SPACE') ||
+                        event.reason.message.includes('posthog') ||
+                        event.reason.message.includes('IndexedDB') ||
+                        event.reason.message.includes('ERR_BLOCKED_BY_CLIENT')
+                    )
+                )) {
+                    // Erreur liée à PostHog - ne pas bloquer l'application
+                    console.warn('Promesse PostHog rejetée ignorée:', event.reason);
+                    event.preventDefault();
+                }
             });
         </script>
     </body>
