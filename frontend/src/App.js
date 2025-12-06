@@ -522,6 +522,12 @@ function App() {
     setSelectedTimeSlot(bookingData.selectedTimeSlot);
     setSelectedMovie(bookingData.selectedMovie);
 
+    // Debug: log the schedule to see what we're getting
+    console.log("Booking data schedule:", bookingData.schedule);
+    console.log("Schedule entry_time:", bookingData.schedule?.entry_time);
+    console.log("Schedule start_time:", bookingData.schedule?.start_time);
+    console.log("Schedule end_time:", bookingData.schedule?.end_time);
+
     // Set form data
     const dayNames = [
       "dimanche",
@@ -544,7 +550,7 @@ function App() {
       dayOfWeek: selectedDay,
     }));
 
-    // Set pre-fill state
+    // Set pre-fill state - preserve the schedule object as-is
     setIsPreFilled(true);
     setPreFillData({
       date: bookingData.selectedDate,
@@ -743,7 +749,23 @@ function App() {
         );
 
         if (!preFilledScheduleExists && preFillData.schedule) {
+          // Debug: log the schedule to see what we have
+          console.log("Pre-fill schedule:", preFillData.schedule);
+          console.log(
+            "Pre-fill schedule entry_time:",
+            preFillData.schedule.entry_time
+          );
+          console.log(
+            "Pre-fill schedule start_time:",
+            preFillData.schedule.start_time
+          );
+          console.log(
+            "Pre-fill schedule end_time:",
+            preFillData.schedule.end_time
+          );
+
           // Create a schedule object in the same format as the API response
+          // Preserve ALL properties from the original schedule
           const preFilledSchedule = {
             schedule: {
               id: preFillData.schedule.id || preFillData.timeSlot,
@@ -751,13 +773,21 @@ function App() {
               date: preFillData.date,
               time_slot: preFillData.timeSlot,
               capacity: preFillData.schedule.capacity || 21,
+              // Preserve the time properties - they might be in the schedule object directly
               entry_time: preFillData.schedule.entry_time,
               start_time: preFillData.schedule.start_time,
               end_time: preFillData.schedule.end_time,
+              // Also preserve any other properties that might be in the schedule
+              ...(preFillData.schedule.custom_time && {
+                custom_time: preFillData.schedule.custom_time,
+              }),
               is_active: true,
             },
             movie: preFillData.movie,
           };
+
+          console.log("Created pre-filled schedule:", preFilledSchedule);
+
           // Add the pre-filled schedule at the beginning of the list
           schedules.unshift(preFilledSchedule);
         }
@@ -2035,19 +2065,32 @@ function App() {
             selectedMovie &&
             (() => {
               // Trouver le schedule correspondant pour obtenir les horaires réels
-              const scheduleForSlot = movieSchedules.find(
-                (schedule) => schedule.schedule.time_slot === selectedTimeSlot
-              );
+              // Priorité au schedule prérempli qui contient les vraies informations
               const actualSchedule =
-                scheduleForSlot?.schedule || preFillData?.schedule;
+                preFillData?.schedule ||
+                movieSchedules.find(
+                  (schedule) => schedule.schedule.time_slot === selectedTimeSlot
+                )?.schedule;
 
               // Déterminer l'heure à afficher
               let displayTime = selectedTimeSlot;
               if (actualSchedule?.entry_time && actualSchedule?.start_time) {
-                console.log("actualSchedule", actualSchedule);
-                displayTime = `Entrée : ${actualSchedule.entry_time} • Diffusion : ${actualSchedule.start_time}`;
+                displayTime = `Entrée : ${
+                  actualSchedule.entry_time
+                } • Diffusion : ${actualSchedule.start_time}${
+                  actualSchedule.end_time
+                    ? ` • Fin : ${actualSchedule.end_time}`
+                    : ""
+                }`;
               } else if (actualSchedule?.start_time) {
-                displayTime = `Diffusion : ${actualSchedule.start_time}`;
+                displayTime = `Diffusion : ${actualSchedule.start_time}${
+                  actualSchedule.end_time
+                    ? ` • Fin : ${actualSchedule.end_time}`
+                    : ""
+                }`;
+              } else if (actualSchedule?.custom_time) {
+                // Pour les événements avec custom_time
+                displayTime = `Début : ${actualSchedule.custom_time}`;
               }
 
               return (
