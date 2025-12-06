@@ -93,8 +93,14 @@ def encode_mongo_url(url):
 # Encoder l'URL si nécessaire
 encoded_mongo_url = encode_mongo_url(mongo_url)
 
+# Initialiser les variables globales
+client = None
+db = None
+
 try:
     # Augmenter le timeout pour MongoDB Atlas (30 secondes)
+    # Note: La connexion réelle se fera de manière lazy (au premier appel)
+    # On crée juste le client ici, la connexion sera testée au démarrage
     client = AsyncIOMotorClient(
         encoded_mongo_url, 
         serverSelectionTimeoutMS=30000, 
@@ -102,13 +108,24 @@ try:
         socketTimeoutMS=30000
     )
     db = client[db_name]
-    logging.info(f"✅ Connexion MongoDB configurée : {db_name}")
-    logging.info(f"   URL: {mongo_url.split('@')[0] + '@***' if '@' in mongo_url else '***'}")
+    logging.info(f"✅ Client MongoDB initialisé pour : {db_name}")
+    # Masquer les informations sensibles dans les logs
+    if '@' in mongo_url:
+        url_preview = mongo_url.split('@')[0] + '@***'
+    else:
+        url_preview = '***'
+    logging.info(f"   URL: {url_preview}")
+    logging.info(f"   URL encodée: {'Oui' if encoded_mongo_url != mongo_url else 'Non'}")
 except Exception as e:
-    logging.error(f"❌ Erreur lors de la configuration MongoDB : {e}")
+    error_msg = str(e)
+    logging.error(f"❌ Erreur lors de l'initialisation du client MongoDB : {error_msg}")
     logging.error("   Le serveur démarrera mais les requêtes MongoDB échoueront")
-    logging.error("   Vérifiez votre MONGO_URL dans le fichier .env")
+    logging.error("   Vérifiez votre MONGO_URL dans les variables d'environnement Vercel")
     logging.error("   Si votre mot de passe contient @, :, /, etc., encodez-les en URL")
+    if "options are key=value pairs" in error_msg.lower():
+        logging.error("   ⚠️  Erreur de format d'URL détectée")
+        logging.error("   Vérifiez que votre URL est au format : mongodb+srv://user:pass%40word@host")
+        logging.error("   Le %40 encode le caractère @ dans le mot de passe")
     # Créer des objets None pour éviter les erreurs, mais ils ne fonctionneront pas
     client = None
     db = None
@@ -604,16 +621,25 @@ async def get_admin_user(credentials = Depends(security)):
 async def check_mongodb_connection():
     """Check if MongoDB is available"""
     if db is None or client is None:
-        logging.warning("⚠️  MongoDB client non initialisé")
         return False
     try:
+        # Tester la connexion avec un ping
+        # Utiliser un timeout plus court pour les vérifications en cours d'exécution (5s)
+        # car la connexion devrait déjà être établie
         await asyncio.wait_for(client.admin.command('ping'), timeout=5.0)
         return True
     except asyncio.TimeoutError:
-        logging.error("❌ Timeout lors de la connexion MongoDB")
+        # Ne pas logger les timeouts à chaque vérification pour éviter le spam
         return False
     except Exception as e:
-        logging.error(f"❌ Erreur de connexion MongoDB : {e}")
+        error_msg = str(e)
+        # Ne pas logger toutes les erreurs de connexion à chaque requête pour éviter le spam
+        # On log seulement les erreurs importantes
+        if "authentication" in error_msg.lower() or "unauthorized" in error_msg.lower():
+            logging.error(f"❌ Erreur d'authentification MongoDB : {error_msg}")
+        elif "dns" in error_msg.lower() or "resolve" in error_msg.lower():
+            logging.error(f"❌ Erreur de résolution DNS MongoDB : {error_msg}")
+        # Ne pas logger les autres erreurs pour éviter le spam
         return False
 
 # Helper function to get current time slot settings
@@ -4266,21 +4292,65 @@ logger = logging.getLogger(__name__)
 @app.on_event("startup")
 async def startup_db_tasks():
     # Vérifier la connexion MongoDB
-    if await check_mongodb_connection():
-        logging.info("✅ Connexion MongoDB établie")
+    logging.info("🔍 Vérification de la connexion MongoDB au démarrage...")
+    
+    # Motor utilise une connexion lazy, donc on doit forcer une connexion explicite
+    if client is not None and db is not None:
         try:
-            await migrate_legacy_time_slots()
-        except Exception as exc:
-            logging.error(
-                "Échec de la migration automatique des créneaux legacy: %s",
-                exc,
-            )
+            # Forcer une connexion explicite en faisant un ping
+            # Utiliser un timeout plus long pour Vercel (30 secondes)
+            logging.info("⏳ Tentative de connexion MongoDB (timeout: 30s)...")
+            await asyncio.wait_for(client.admin.command('ping'), timeout=30.0)
+            logging.info("✅ Connexion MongoDB établie avec succès")
+            
+            # Tester l'accès à la base de données
+            try:
+                collections = await db.list_collection_names()
+                logging.info(f"✅ Accès à la base de données confirmé ({len(collections)} collections)")
+            except Exception as e:
+                logging.warning(f"⚠️  Accès à la base de données limité : {e}")
+            
+            try:
+                await migrate_legacy_time_slots()
+            except Exception as exc:
+                logging.error(
+                    "Échec de la migration automatique des créneaux legacy: %s",
+                    exc,
+                )
+        except asyncio.TimeoutError:
+            logging.error("❌ Timeout lors de la connexion MongoDB (30s écoulés)")
+            logging.warning("   Cela peut être dû à :")
+            logging.warning("   - Un problème de réseau entre Vercel et MongoDB Atlas")
+            logging.warning("   - Les IP de Vercel ne sont pas autorisées dans MongoDB Atlas")
+            logging.warning("   - Un problème de résolution DNS")
+            logging.warning("   La connexion sera réessayée lors de la première requête")
+        except Exception as e:
+            error_msg = str(e)
+            logging.error(f"❌ Erreur lors de la connexion MongoDB : {error_msg}")
+            if "authentication" in error_msg.lower():
+                logging.warning("   ⚠️  Problème d'authentification - vérifiez vos identifiants MongoDB")
+            elif "dns" in error_msg.lower() or "resolve" in error_msg.lower():
+                logging.warning("   ⚠️  Problème de résolution DNS - vérifiez l'URL MongoDB")
+            else:
+                logging.warning("   La connexion sera réessayée lors de la première requête")
     else:
-        logging.warning("⚠️  MongoDB non disponible - certaines fonctionnalités seront limitées")
-        logging.warning("   Pour utiliser l'application complètement :")
-        logging.warning("   1. Installez MongoDB localement, OU")
-        logging.warning("   2. Utilisez MongoDB Atlas (gratuit) : https://www.mongodb.com/cloud/atlas")
-        logging.warning("   3. Configurez MONGO_URL dans votre fichier .env")
+        logging.warning("⚠️  MongoDB client non initialisé")
+        logging.warning("   Vérifications à effectuer :")
+        logging.warning("   1. Vérifiez que MONGO_URL est défini dans les variables d'environnement Vercel")
+        logging.warning("   2. Vérifiez que l'URL est correctement encodée (utilisez %40 pour @ dans le mot de passe)")
+        logging.warning("   3. Vérifiez que DB_NAME est défini")
+        logging.warning("   4. Vérifiez que votre IP est autorisée dans MongoDB Atlas (ou utilisez 0.0.0.0/0)")
+        logging.warning("   5. Vérifiez que les identifiants MongoDB sont corrects")
+        # Afficher des informations de débogage (sans les secrets)
+        if mongo_url:
+            url_preview = mongo_url.split('@')[0] + '@***' if '@' in mongo_url else mongo_url
+            logging.warning(f"   MONGO_URL configuré : {url_preview}")
+        else:
+            logging.error("   ❌ MONGO_URL n'est pas défini !")
+        if db_name:
+            logging.warning(f"   DB_NAME configuré : {db_name}")
+        else:
+            logging.error("   ❌ DB_NAME n'est pas défini !")
 
 
 @app.on_event("shutdown")
