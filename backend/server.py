@@ -3126,20 +3126,90 @@ async def get_movie_schedules(date_from: Optional[str] = None, date_to: Optional
 @api_router.get("/movie-schedules/by-date/{schedule_date}")
 async def get_schedules_by_date(schedule_date: str):
     try:
-        schedules = await db.movie_schedules.find({
-            "date": schedule_date,
-            "is_active": True
-        }).to_list(10)
-        
         result = []
-        for schedule in schedules:
-            parsed_schedule = parse_from_mongo(schedule)
-            movie = await db.movies.find_one({"id": parsed_schedule["movie_id"]})
-            if movie:
-                result.append({
-                    "schedule": MovieSchedule(**parsed_schedule),
-                    "movie": Movie(**parse_from_mongo(movie))
+        
+        # Get content schedules (new system) for this date
+        try:
+            content_schedules = await db.content_schedules.find({
+                "date": schedule_date,
+                "is_active": True,
+                "content_type": "movie"  # Only movies, not events
+            }).to_list(100)
+            
+            for schedule in content_schedules:
+                parsed_schedule = parse_from_mongo(schedule)
+                
+                # Enrichir avec les horaires depuis movie_schedules si disponibles
+                schedule_date_str = parsed_schedule["date"].isoformat() if isinstance(parsed_schedule["date"], date) else str(parsed_schedule["date"])
+                time_slot_str = parsed_schedule["time_slot"].value if isinstance(parsed_schedule["time_slot"], TimeSlot) else str(parsed_schedule["time_slot"])
+                
+                # Chercher les horaires dans movie_schedules correspondants
+                movie_schedule = await db.movie_schedules.find_one({
+                    "date": schedule_date_str,
+                    "time_slot": time_slot_str,
+                    "is_active": True
                 })
+                
+                if movie_schedule:
+                    parsed_movie_schedule = parse_from_mongo(movie_schedule)
+                    # Ajouter les horaires au schedule
+                    if parsed_movie_schedule.get("entry_time"):
+                        parsed_schedule["entry_time"] = parsed_movie_schedule["entry_time"]
+                    if parsed_movie_schedule.get("start_time"):
+                        parsed_schedule["start_time"] = parsed_movie_schedule["start_time"]
+                    if parsed_movie_schedule.get("end_time"):
+                        parsed_schedule["end_time"] = parsed_movie_schedule["end_time"]
+                
+                # Get the movie
+                movie = await db.movies.find_one({"id": parsed_schedule["content_id"], "is_active": True})
+                if movie:
+                    # Convert ContentSchedule to MovieSchedule format for backward compatibility
+                    movie_schedule_format = {
+                        "id": parsed_schedule["id"],
+                        "movie_id": parsed_schedule["content_id"],
+                        "date": parsed_schedule["date"],
+                        "time_slot": parsed_schedule["time_slot"],
+                        "capacity": parsed_schedule.get("capacity", 21),
+                        "entry_time": parsed_schedule.get("entry_time"),
+                        "start_time": parsed_schedule.get("start_time"),
+                        "end_time": parsed_schedule.get("end_time"),
+                        "is_active": parsed_schedule["is_active"],
+                        "created_at": parsed_schedule.get("created_at", datetime.now(timezone.utc))
+                    }
+                    result.append({
+                        "schedule": MovieSchedule(**movie_schedule_format),
+                        "movie": Movie(**parse_from_mongo(movie))
+                    })
+        except Exception as e:
+            logging.warning(f"Erreur lors de la récupération des content_schedules: {e}")
+        
+        # Get legacy movie schedules for this date
+        try:
+            legacy_schedules = await db.movie_schedules.find({
+                "date": schedule_date,
+                "is_active": True
+            }).to_list(100)
+            
+            for schedule in legacy_schedules:
+                parsed_schedule = parse_from_mongo(schedule)
+                movie = await db.movies.find_one({"id": parsed_schedule["movie_id"], "is_active": True})
+                if movie:
+                    # Check if this schedule is already in result (from content_schedules)
+                    # to avoid duplicates
+                    existing = any(
+                        r["schedule"].id == parsed_schedule["id"] or
+                        (r["schedule"].date == parsed_schedule["date"] and 
+                         r["schedule"].time_slot == parsed_schedule["time_slot"] and
+                         r["movie"].id == parsed_schedule["movie_id"])
+                        for r in result
+                    )
+                    if not existing:
+                        result.append({
+                            "schedule": MovieSchedule(**parsed_schedule),
+                            "movie": Movie(**parse_from_mongo(movie))
+                        })
+        except Exception as e:
+            logging.warning(f"Erreur lors de la récupération des movie_schedules legacy: {e}")
         
         return result
         
@@ -3768,6 +3838,7 @@ async def get_booking_details_from_schedules(
     logging.info(f"🔍 Recherche détails pour booking_date={booking_date_str} (type: {type(booking_date)}), time_slot={time_slot_str}, normalized={normalized_time_slot}, content_id={content_id}, content_type={content_type}")
     
     entry_time = None
+    start_time = None
     movie_title = None
     
     # Si content_id et content_type sont disponibles, utiliser directement pour récupérer le titre
@@ -3825,8 +3896,9 @@ async def get_booking_details_from_schedules(
     
     if content_schedule:
         logging.info(f"✅ Trouvé content_schedule: {content_schedule.get('content_id')}, type: {content_schedule.get('content_type')}")
-        # Récupérer entry_time depuis content_schedule
+        # Récupérer entry_time et start_time depuis content_schedule
         entry_time = content_schedule.get("entry_time")
+        start_time = content_schedule.get("start_time")
         
         # Récupérer le titre du film/événement via content_id
         schedule_content_type = content_schedule.get("content_type", "movie")
@@ -3853,8 +3925,8 @@ async def get_booking_details_from_schedules(
             else:
                 logging.warning(f"⚠️ Événement non trouvé avec content_id={schedule_content_id} depuis content_schedule")
         
-        # Si entry_time n'est pas dans content_schedule, chercher dans movie_schedules legacy
-        if not entry_time:
+        # Si entry_time ou start_time n'est pas dans content_schedule, chercher dans movie_schedules legacy
+        if not entry_time or not start_time:
             movie_schedule_temp = None
             for date_var in date_variants:
                 movie_schedule_temp = await db.movie_schedules.find_one({
@@ -3873,8 +3945,11 @@ async def get_booking_details_from_schedules(
                     if movie_schedule_temp:
                         break
             if movie_schedule_temp:
-                entry_time = movie_schedule_temp.get("entry_time")
-                logging.info(f"✅ entry_time trouvé dans movie_schedule: {entry_time}")
+                if not entry_time:
+                    entry_time = movie_schedule_temp.get("entry_time")
+                if not start_time:
+                    start_time = movie_schedule_temp.get("start_time")
+                logging.info(f"✅ Horaires trouvés dans movie_schedule: entry_time={entry_time}, start_time={start_time}")
     else:
         logging.info(f"⚠️ Aucun content_schedule trouvé pour date={booking_date_str}, time_slot={normalized_time_slot or time_slot_str}")
         # Recherche de secours : chercher tous les schedules pour cette date (peu importe le time_slot)
@@ -3888,7 +3963,10 @@ async def get_booking_details_from_schedules(
                 # Prendre le premier schedule trouvé comme fallback
                 content_schedule = all_schedules[0]
                 logging.info(f"✅ Utilisation du schedule de secours: content_id={content_schedule.get('content_id')}, time_slot={content_schedule.get('time_slot')}")
-                entry_time = content_schedule.get("entry_time")
+                if not entry_time:
+                    entry_time = content_schedule.get("entry_time")
+                if not start_time:
+                    start_time = content_schedule.get("start_time")
                 # Récupérer le titre
                 schedule_content_type = content_schedule.get("content_type", "movie")
                 schedule_content_id = content_schedule.get("content_id")
@@ -3909,7 +3987,7 @@ async def get_booking_details_from_schedules(
                 break
     
     # Si pas trouvé dans content_schedules, chercher dans movie_schedules legacy
-    if not entry_time or not movie_title:
+    if not start_time or not movie_title:
         movie_schedule = None
         for date_var in date_variants:
             movie_schedule = await db.movie_schedules.find_one({
@@ -3934,9 +4012,11 @@ async def get_booking_details_from_schedules(
         
         if movie_schedule:
             logging.info(f"✅ Trouvé movie_schedule legacy: movie_id={movie_schedule.get('movie_id')}")
-            # Récupérer entry_time depuis movie_schedule
+            # Récupérer entry_time et start_time depuis movie_schedule
             if not entry_time:
                 entry_time = movie_schedule.get("entry_time")
+            if not start_time:
+                start_time = movie_schedule.get("start_time")
             
             # Récupérer movie_title via movie_id (jointure avec movies)
             if not movie_title:
@@ -3967,6 +4047,8 @@ async def get_booking_details_from_schedules(
                     logging.info(f"✅ Utilisation du movie_schedule de secours: movie_id={movie_schedule.get('movie_id')}, time_slot={movie_schedule.get('time_slot')}")
                     if not entry_time:
                         entry_time = movie_schedule.get("entry_time")
+                    if not start_time:
+                        start_time = movie_schedule.get("start_time")
                     if not movie_title:
                         movie_id = movie_schedule.get("movie_id")
                         if movie_id:
@@ -3978,8 +4060,8 @@ async def get_booking_details_from_schedules(
                                 logging.info(f"✅ Film trouvé via movie_schedule de secours: {movie_title}")
                     break
     
-    # Si entry_time n'est toujours pas trouvé, utiliser TimeSlotSettings
-    if not entry_time:
+    # Si start_time n'est toujours pas trouvé, utiliser TimeSlotSettings ou time_slot
+    if not start_time:
         try:
             time_settings = await get_time_slot_settings()
             time_slot_str_lower = str(time_slot_str).lower().strip()
@@ -3996,18 +4078,18 @@ async def get_booking_details_from_schedules(
             if (time_slot_str_lower == "21h15" or 
                 time_slot_str_lower == first_slot_lower or 
                 normalized_time_slot_lower == first_slot_lower):
-                entry_time = time_settings.first_slot_entry_time
-                logging.info(f"✅ entry_time trouvé via first_slot: {entry_time}")
+                start_time = time_settings.first_slot_start_time
+                logging.info(f"✅ start_time trouvé via first_slot: {start_time}")
             elif (time_slot_str_lower == "23h45" or 
                   time_slot_str_lower == second_slot_lower or 
                   normalized_time_slot_lower == second_slot_lower):
-                entry_time = time_settings.second_slot_entry_time
-                logging.info(f"✅ entry_time trouvé via second_slot: {entry_time}")
+                start_time = time_settings.second_slot_start_time
+                logging.info(f"✅ start_time trouvé via second_slot: {start_time}")
             elif (time_slot_str_lower == "01h30" or 
                   time_slot_str_lower == third_slot_lower or 
                   normalized_time_slot_lower == third_slot_lower):
-                entry_time = time_settings.third_slot_entry_time
-                logging.info(f"✅ entry_time trouvé via third_slot: {entry_time}")
+                start_time = time_settings.third_slot_start_time
+                logging.info(f"✅ start_time trouvé via third_slot: {start_time}")
             else:
                 logging.warning(f"⚠️ Aucune correspondance trouvée dans TimeSlotSettings pour time_slot={time_slot_str_lower}")
         except Exception as e:
@@ -4016,44 +4098,46 @@ async def get_booking_details_from_schedules(
     if not movie_title:
         logging.warning(f"❌ Aucun titre de film trouvé pour booking_date={booking_date_str}, time_slot={time_slot_str}")
     
-    # S'assurer qu'entry_time est toujours renvoyé (même si c'est une valeur par défaut)
-    if not entry_time:
-        logging.warning(f"⚠️ entry_time non trouvé, tentative de récupération depuis TimeSlotSettings avec time_slot={time_slot_str}")
+    # S'assurer que start_time est toujours renvoyé (même si c'est une valeur par défaut ou le time_slot)
+    if not start_time:
+        logging.warning(f"⚠️ start_time non trouvé, tentative de récupération depuis TimeSlotSettings avec time_slot={time_slot_str}")
         try:
             time_settings = await get_time_slot_settings()
             # En dernier recours, utiliser les valeurs par défaut des TimeSlotSettings
-            # Si le time_slot contient "21" ou "premier", utiliser first_slot_entry_time
-            # Si le time_slot contient "23" ou "deuxième", utiliser second_slot_entry_time
-            # Si le time_slot contient "01" ou "troisième", utiliser third_slot_entry_time
+            # Si le time_slot contient "21" ou "premier", utiliser first_slot_start_time
+            # Si le time_slot contient "23" ou "deuxième", utiliser second_slot_start_time
+            # Si le time_slot contient "01" ou "troisième", utiliser third_slot_start_time
             time_slot_str_lower = str(time_slot_str).lower()
             if "21" in time_slot_str_lower or "premier" in time_slot_str_lower:
-                entry_time = time_settings.first_slot_entry_time or "18h45"
-                logging.info(f"✅ Utilisation de first_slot_entry_time par défaut: {entry_time}")
+                start_time = time_settings.first_slot_start_time or "19h00"
+                logging.info(f"✅ Utilisation de first_slot_start_time par défaut: {start_time}")
             elif "23" in time_slot_str_lower or "deuxième" in time_slot_str_lower or "second" in time_slot_str_lower:
-                entry_time = time_settings.second_slot_entry_time or "21h00"
-                logging.info(f"✅ Utilisation de second_slot_entry_time par défaut: {entry_time}")
+                start_time = time_settings.second_slot_start_time or "21h15"
+                logging.info(f"✅ Utilisation de second_slot_start_time par défaut: {start_time}")
             elif "01" in time_slot_str_lower or "troisième" in time_slot_str_lower or "third" in time_slot_str_lower:
-                entry_time = time_settings.third_slot_entry_time or "23h15"
-                logging.info(f"✅ Utilisation de third_slot_entry_time par défaut: {entry_time}")
+                start_time = time_settings.third_slot_start_time or "23h30"
+                logging.info(f"✅ Utilisation de third_slot_start_time par défaut: {start_time}")
             else:
-                # Fallback absolu : utiliser first_slot_entry_time
-                entry_time = time_settings.first_slot_entry_time or "18h45"
-                logging.warning(f"⚠️ Utilisation du fallback absolu (first_slot_entry_time): {entry_time}")
+                # Fallback absolu : utiliser le time_slot lui-même comme start_time
+                start_time = time_slot_str if time_slot_str else "19h00"
+                logging.warning(f"⚠️ Utilisation du time_slot comme start_time: {start_time}")
         except Exception as e:
             logging.error(f"❌ Erreur lors de la récupération des TimeSlotSettings pour le fallback: {e}")
-            # Fallback final : utiliser une valeur par défaut basée sur le time_slot
+            # Fallback final : utiliser le time_slot lui-même ou une valeur par défaut basée sur le time_slot
             if "21" in str(time_slot_str).lower():
-                entry_time = "18h45"
+                start_time = "19h00"
             elif "23" in str(time_slot_str).lower():
-                entry_time = "21h00"
+                start_time = "21h15"
             elif "01" in str(time_slot_str).lower():
-                entry_time = "23h15"
+                start_time = "23h30"
             else:
-                entry_time = "18h45"  # Valeur par défaut
-            logging.warning(f"⚠️ Utilisation d'une valeur par défaut hardcodée: {entry_time}")
+                # Utiliser le time_slot lui-même comme fallback
+                start_time = time_slot_str if time_slot_str else "19h00"
+            logging.warning(f"⚠️ Utilisation d'une valeur par défaut hardcodée: {start_time}")
     
     return {
         "entry_time": entry_time,
+        "start_time": start_time,
         "movie_title": movie_title
     }
 

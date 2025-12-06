@@ -729,6 +729,21 @@ function App() {
       const schedules = response.data || [];
       setMovieSchedules(schedules);
 
+      // Verify that the currently selected time slot is still valid
+      // If selectedTimeSlot is set but not in the fetched schedules, try to find it
+      if (selectedTimeSlot && schedules.length > 0) {
+        const slotExists = schedules.some(
+          (s) => s.schedule.time_slot === selectedTimeSlot
+        );
+        if (!slotExists) {
+          // The selected time slot is not in the list, but we should keep it
+          // as it might be from a pre-filled selection
+          console.log(
+            `Selected time slot ${selectedTimeSlot} not found in schedules, keeping selection`
+          );
+        }
+      }
+
       // Also fetch availability info for each time slot found in schedules
       const timeSlotValues =
         schedules.length > 0
@@ -739,6 +754,12 @@ function App() {
               timeSlotSettings.second_slot_value || "23h45",
             ]
           : ["21h15", "23h45"];
+      
+      // Also include selectedTimeSlot in availability check if it's set
+      if (selectedTimeSlot && !timeSlotValues.includes(selectedTimeSlot)) {
+        timeSlotValues.push(selectedTimeSlot);
+      }
+      
       const availabilityPromises = timeSlotValues.map(async (timeSlot) => {
         try {
           const availResponse = await axios.get(
