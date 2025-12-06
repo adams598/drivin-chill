@@ -2210,12 +2210,10 @@ function App() {
                                   {schedule.schedule.entry_time &&
                                   schedule.schedule.start_time
                                     ? `Entrée: ${
-                                        schedule.schedule.entry_time
-                                      } • Début: ${
-                                        schedule.schedule.start_time
-                                      }${
-                                        schedule.schedule.end_time
-                                          ? ` • Fin: ${schedule.schedule.end_time}`
+                                        actualSchedule.entry_time
+                                      } • Début: ${actualSchedule.start_time}${
+                                        actualSchedule.end_time
+                                          ? ` • Fin: ${actualSchedule.end_time}`
                                           : ""
                                       }`
                                     : getTimeSlotDisplay(
