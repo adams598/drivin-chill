@@ -106,21 +106,60 @@ else:
     connect_timeout = 30000
     socket_timeout = 30000
 
+# Configuration SSL/TLS pour MongoDB Atlas
+# MongoDB Atlas nécessite SSL/TLS par défaut
+is_atlas = 'mongodb+srv://' in mongo_url or 'mongodb.net' in mongo_url
+
+# Paramètres de connexion MongoDB
+mongo_kwargs = {
+    'serverSelectionTimeoutMS': server_selection_timeout,
+    'connectTimeoutMS': connect_timeout,
+    'socketTimeoutMS': socket_timeout,
+    'maxPoolSize': 1 if is_production else 10,  # Pool réduit en production
+    'minPoolSize': 0,  # Pas de connexions persistantes en serverless
+    'maxIdleTimeMS': 45000,  # Fermer les connexions inactives après 45s
+    'retryWrites': True,  # Activer les retry writes
+    'retryReads': True,  # Activer les retry reads
+}
+
+# Pour MongoDB Atlas, SSL/TLS est automatique avec mongodb+srv://
+# Mais on peut ajouter des paramètres explicites si nécessaire
+# Note: Motor utilise 'tls' pour les versions récentes, 'ssl' pour les anciennes
+if is_atlas:
+    # Vérifier si l'URL contient déjà des paramètres TLS
+    url_lower = encoded_mongo_url.lower()
+    if 'tls=true' not in url_lower and 'ssl=true' not in url_lower:
+        # Ajouter les paramètres TLS explicites seulement si pas déjà présents
+        # Pour mongodb+srv://, TLS est automatique, mais on peut forcer la validation
+        try:
+            # Motor 3.0+ utilise 'tls', versions antérieures utilisent 'ssl'
+            # On essaie 'tls' d'abord, qui est la norme moderne
+            mongo_kwargs.update({
+                'tls': True,  # Activer TLS pour MongoDB Atlas
+                'tlsAllowInvalidCertificates': False,  # Valider les certificats
+                'tlsAllowInvalidHostnames': False,  # Valider les hostnames
+            })
+            logging.info("   Configuration MongoDB Atlas détectée - SSL/TLS activé")
+        except Exception:
+            # Fallback pour les anciennes versions de Motor
+            try:
+                mongo_kwargs.update({
+                    'ssl': True,
+                    'ssl_cert_reqs': 2,  # CERT_REQUIRED
+                })
+                logging.info("   Configuration MongoDB Atlas détectée - SSL activé (mode legacy)")
+            except Exception:
+                logging.warning("   Impossible de configurer SSL/TLS explicitement, utilisation des paramètres par défaut")
+    else:
+        logging.info("   Configuration MongoDB Atlas détectée - SSL/TLS déjà configuré dans l'URL")
+
 try:
-    # Créer le client MongoDB avec les timeouts appropriés
-    # maxPoolSize=1 pour les environnements serverless (évite les connexions multiples)
-    client = AsyncIOMotorClient(
-        encoded_mongo_url, 
-        serverSelectionTimeoutMS=server_selection_timeout, 
-        connectTimeoutMS=connect_timeout,
-        socketTimeoutMS=socket_timeout,
-        maxPoolSize=1 if is_production else 10,  # Pool réduit en production
-        minPoolSize=0,  # Pas de connexions persistantes en serverless
-        maxIdleTimeMS=45000,  # Fermer les connexions inactives après 45s
-    )
+    # Créer le client MongoDB avec les paramètres optimisés
+    client = AsyncIOMotorClient(encoded_mongo_url, **mongo_kwargs)
     db = client[db_name]
     logging.info(f"✅ Connexion MongoDB configurée : {db_name}")
     logging.info(f"   Mode: {'Production (serverless)' if is_production else 'Développement'}")
+    logging.info(f"   Type: {'MongoDB Atlas' if is_atlas else 'MongoDB local'}")
     logging.info(f"   URL: {mongo_url.split('@')[0] + '@***' if '@' in mongo_url else '***'}")
     # Ne pas tester la connexion immédiatement en production (lazy connection)
     if not is_production:
@@ -140,6 +179,11 @@ except Exception as e:
     logging.error(f"❌ Erreur lors de la configuration MongoDB : {e}")
     logging.error("   Le serveur démarrera mais les requêtes MongoDB échoueront")
     logging.error("   Vérifiez votre MONGO_URL dans les variables d'environnement")
+    if is_atlas:
+        logging.error("   Pour MongoDB Atlas, assurez-vous que :")
+        logging.error("   1. L'URL contient 'mongodb+srv://'")
+        logging.error("   2. Les adresses IP de Vercel sont autorisées (0.0.0.0/0 dans Network Access)")
+        logging.error("   3. L'utilisateur a les permissions nécessaires")
     logging.error("   Si votre mot de passe contient @, :, /, etc., encodez-les en URL")
     # Créer des objets None pour éviter les erreurs, mais ils ne fonctionneront pas
     client = None
@@ -641,34 +685,69 @@ async def get_admin_user(credentials = Depends(security)):
     return True
 
 # Helper function to check MongoDB connection
-async def check_mongodb_connection():
-    """Check if MongoDB is available - optimisé pour la production"""
+async def check_mongodb_connection(max_retries: int = 2):
+    """Check if MongoDB is available - optimisé pour la production avec retry"""
     if db is None or client is None:
         logging.warning("⚠️  MongoDB client non initialisé")
         return False
-    try:
-        # En production, utiliser un timeout plus court pour éviter les timeouts de la plateforme
-        timeout = 10.0 if is_production else 30.0
-        await asyncio.wait_for(client.admin.command('ping'), timeout=timeout)
-        return True
-    except asyncio.TimeoutError:
-        if is_production:
-            logging.warning("⚠️  Timeout lors de la connexion MongoDB (peut être normal en serverless)")
-            logging.warning("   La connexion sera réessayée à la prochaine requête")
-        else:
-            logging.error("❌ Timeout lors de la connexion MongoDB")
-            logging.error("   Vérifiez que MongoDB est démarré et que MONGO_URL est correct")
-        return False
-    except Exception as e:
-        # En production, ne pas logger toutes les erreurs comme critiques
-        # (peut être dû à une connexion lazy)
-        error_msg = str(e).lower()
-        if is_production and ('network' in error_msg or 'connection' in error_msg):
-            logging.warning(f"⚠️  Connexion MongoDB non disponible (sera réessayée): {type(e).__name__}")
-        else:
-            logging.error(f"❌ Erreur de connexion MongoDB : {e}")
-            logging.error("   Vérifiez votre MONGO_URL dans les variables d'environnement")
-        return False
+    
+    # En production, utiliser un timeout plus court pour éviter les timeouts de la plateforme
+    timeout = 10.0 if is_production else 30.0
+    
+    # Retry logic pour les environnements serverless
+    for attempt in range(max_retries + 1):
+        try:
+            await asyncio.wait_for(client.admin.command('ping'), timeout=timeout)
+            if attempt > 0:
+                logging.info(f"✅ Connexion MongoDB établie après {attempt + 1} tentative(s)")
+            return True
+        except asyncio.TimeoutError:
+            if attempt < max_retries:
+                wait_time = (attempt + 1) * 0.5  # Backoff exponentiel
+                logging.warning(f"⚠️  Timeout MongoDB (tentative {attempt + 1}/{max_retries + 1}), réessai dans {wait_time}s...")
+                await asyncio.sleep(wait_time)
+                continue
+            else:
+                if is_production:
+                    logging.warning("⚠️  Timeout lors de la connexion MongoDB après tous les essais")
+                    logging.warning("   La connexion sera réessayée à la prochaine requête")
+                else:
+                    logging.error("❌ Timeout lors de la connexion MongoDB")
+                    logging.error("   Vérifiez que MongoDB est démarré et que MONGO_URL est correct")
+                return False
+        except Exception as e:
+            error_msg = str(e).lower()
+            # Erreurs SSL/TLS spécifiques
+            if 'ssl' in error_msg or 'tls' in error_msg or 'handshake' in error_msg:
+                logging.error(f"❌ Erreur SSL/TLS MongoDB : {e}")
+                logging.error("   Vérifiez que votre MONGO_URL est correcte pour MongoDB Atlas")
+                logging.error("   Assurez-vous que les adresses IP sont autorisées dans MongoDB Atlas (0.0.0.0/0)")
+                if attempt < max_retries:
+                    wait_time = (attempt + 1) * 0.5
+                    logging.warning(f"   Réessai dans {wait_time}s...")
+                    await asyncio.sleep(wait_time)
+                    continue
+                return False
+            # Autres erreurs réseau
+            elif is_production and ('network' in error_msg or 'connection' in error_msg):
+                if attempt < max_retries:
+                    wait_time = (attempt + 1) * 0.5
+                    logging.warning(f"⚠️  Connexion MongoDB non disponible (tentative {attempt + 1}/{max_retries + 1}), réessai dans {wait_time}s...")
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    logging.warning(f"⚠️  Connexion MongoDB non disponible après tous les essais: {type(e).__name__}")
+                    return False
+            else:
+                logging.error(f"❌ Erreur de connexion MongoDB : {e}")
+                logging.error("   Vérifiez votre MONGO_URL dans les variables d'environnement")
+                if attempt < max_retries:
+                    wait_time = (attempt + 1) * 0.5
+                    await asyncio.sleep(wait_time)
+                    continue
+                return False
+    
+    return False
 
 # Helper function to get current time slot settings
 async def get_time_slot_settings():
