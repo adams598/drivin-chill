@@ -4304,9 +4304,13 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
             
             # PRIORITÉ : Récupérer directement depuis le document booking
             booking_dict = booking_obj.dict()
-            entry_time_from_booking = booking_parsed.get("entry_time")
-            start_time_from_booking = booking_parsed.get("start_time")
-            end_time_from_booking = booking_parsed.get("end_time")
+            
+            # Récupérer les horaires directement depuis le document booking (raw MongoDB document)
+            entry_time_from_booking = booking.get("entry_time")  # Depuis le document MongoDB brut
+            start_time_from_booking = booking.get("start_time")
+            end_time_from_booking = booking.get("end_time")
+            
+            logging.info(f"🔍 Réservation récente {booking_obj.id} - entry_time depuis booking: {entry_time_from_booking}, start_time: {start_time_from_booking}, end_time: {end_time_from_booking}")
             
             # Utiliser directement les valeurs du booking pour les horaires
             booking_dict["entry_time"] = entry_time_from_booking
@@ -4322,17 +4326,24 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
                         movie = await db.movies.find_one({"id": booking_obj.content_id})
                     if movie:
                         movie_title = movie.get("title")
-                        logging.info(f"✅ Film trouvé via content_id: {movie_title}")
+                        logging.info(f"✅ Film trouvé via content_id {booking_obj.content_id}: {movie_title}")
+                    else:
+                        logging.warning(f"⚠️ Film non trouvé avec content_id={booking_obj.content_id}")
                 elif booking_obj.content_type == "event":
                     event = await db.events.find_one({"id": booking_obj.content_id, "is_active": True})
                     if not event:
                         event = await db.events.find_one({"id": booking_obj.content_id})
                     if event:
                         movie_title = event.get("title")
-                        logging.info(f"✅ Événement trouvé via content_id: {movie_title}")
+                        logging.info(f"✅ Événement trouvé via content_id {booking_obj.content_id}: {movie_title}")
+                    else:
+                        logging.warning(f"⚠️ Événement non trouvé avec content_id={booking_obj.content_id}")
+            else:
+                logging.warning(f"⚠️ Réservation récente {booking_obj.id} - Pas de content_id ou content_type: content_id={booking_obj.content_id}, content_type={booking_obj.content_type}")
             
             # Si le titre n'a pas été trouvé via content_id, utiliser les jointures comme fallback
             if not movie_title:
+                logging.info(f"🔄 Tentative de récupération du titre via jointures pour booking récent {booking_obj.id}")
                 booking_details = await get_booking_details_from_schedules(
                     booking_obj.booking_date,
                     booking_obj.time_slot,
@@ -4390,9 +4401,13 @@ async def get_all_admin_bookings(admin = Depends(get_admin_user)):
             
             # PRIORITÉ : Récupérer directement depuis le document booking
             booking_dict = booking_obj.dict()
-            entry_time_from_booking = booking_parsed.get("entry_time")
-            start_time_from_booking = booking_parsed.get("start_time")
-            end_time_from_booking = booking_parsed.get("end_time")
+            
+            # Récupérer les horaires directement depuis le document booking (raw MongoDB document)
+            entry_time_from_booking = booking.get("entry_time")  # Depuis le document MongoDB brut
+            start_time_from_booking = booking.get("start_time")
+            end_time_from_booking = booking.get("end_time")
+            
+            logging.info(f"🔍 Réservation {booking_obj.id} - entry_time depuis booking: {entry_time_from_booking}, start_time: {start_time_from_booking}, end_time: {end_time_from_booking}")
             
             # Utiliser directement les valeurs du booking pour les horaires
             booking_dict["entry_time"] = entry_time_from_booking
@@ -4408,17 +4423,24 @@ async def get_all_admin_bookings(admin = Depends(get_admin_user)):
                         movie = await db.movies.find_one({"id": booking_obj.content_id})
                     if movie:
                         movie_title = movie.get("title")
-                        logging.info(f"✅ Film trouvé via content_id: {movie_title}")
+                        logging.info(f"✅ Film trouvé via content_id {booking_obj.content_id}: {movie_title}")
+                    else:
+                        logging.warning(f"⚠️ Film non trouvé avec content_id={booking_obj.content_id}")
                 elif booking_obj.content_type == "event":
                     event = await db.events.find_one({"id": booking_obj.content_id, "is_active": True})
                     if not event:
                         event = await db.events.find_one({"id": booking_obj.content_id})
                     if event:
                         movie_title = event.get("title")
-                        logging.info(f"✅ Événement trouvé via content_id: {movie_title}")
+                        logging.info(f"✅ Événement trouvé via content_id {booking_obj.content_id}: {movie_title}")
+                    else:
+                        logging.warning(f"⚠️ Événement non trouvé avec content_id={booking_obj.content_id}")
+            else:
+                logging.warning(f"⚠️ Réservation {booking_obj.id} - Pas de content_id ou content_type: content_id={booking_obj.content_id}, content_type={booking_obj.content_type}")
             
             # Si le titre n'a pas été trouvé via content_id, utiliser les jointures comme fallback
             if not movie_title:
+                logging.info(f"🔄 Tentative de récupération du titre via jointures pour booking {booking_obj.id}")
                 booking_details = await get_booking_details_from_schedules(
                     booking_obj.booking_date,
                     booking_obj.time_slot,
