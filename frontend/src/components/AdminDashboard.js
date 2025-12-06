@@ -468,7 +468,7 @@ const AdminDashboard = ({ onLogout }) => {
 
                 // Formater l'affichage du film
                 const formatMovie = () => {
-                  if (booking.movie_title) {
+                  if (booking.movie_title) {image.png
                     return booking.movie_title;
                   }
                   // Si pas de titre mais on a un content_type, indiquer le type
