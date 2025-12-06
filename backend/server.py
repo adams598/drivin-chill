@@ -3842,6 +3842,12 @@ async def get_booking_details_from_schedules(
     end_time = None
     movie_title = None
     
+    # Préparer les variantes de date pour la recherche
+    date_variants = [booking_date_str]
+    # Si la date contient un séparateur, essayer aussi sans
+    if '-' in booking_date_str:
+        date_variants.append(booking_date_str.replace('-', ''))
+    
     # PRIORITÉ : Chercher d'abord dans movie_schedules (legacy) car c'est là que sont stockées
     # les informations spécifiques de chaque réservation (entry_time, start_time, end_time)
     movie_schedule = None
@@ -3910,13 +3916,7 @@ async def get_booking_details_from_schedules(
                 logging.warning(f"⚠️ Événement non trouvé avec content_id={content_id}")
     
     # Chercher dans content_schedules en fallback (nouveau système)
-    # Essayer avec le time_slot normalisé, puis avec l'original
-    # Essayer aussi avec différents formats de date
-    date_variants = [booking_date_str]
-    # Si la date contient un séparateur, essayer aussi sans
-    if '-' in booking_date_str:
-        date_variants.append(booking_date_str.replace('-', ''))
-    
+    # (date_variants est déjà défini plus haut)
     content_schedule = None
     for date_var in date_variants:
         content_schedule = await db.content_schedules.find_one({
