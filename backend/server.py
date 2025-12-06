@@ -547,6 +547,9 @@ class TicketBooking(BaseModel):
     nb_personne: int = 1
     content_type: Optional[str] = None  # 'movie' or 'event'
     content_id: Optional[str] = None  # ID of the movie or event
+    entry_time: Optional[str] = None  # Heure d'entrée (ex: "19h50")
+    start_time: Optional[str] = None  # Heure de début du film (ex: "20h05")
+    end_time: Optional[str] = None  # Heure de fin du film (ex: "22h05")
 
 class TicketBookingCreate(BaseModel):
     first_name: str
@@ -563,6 +566,10 @@ class TicketBookingCreate(BaseModel):
     # New fields for event booking flexibility
     content_type: Optional[str] = None  # 'movie' or 'event'
     content_id: Optional[str] = None
+    # Schedule times - will be saved directly in the booking document
+    entry_time: Optional[str] = None  # Heure d'entrée (ex: "19h50")
+    start_time: Optional[str] = None  # Heure de début du film (ex: "20h05")
+    end_time: Optional[str] = None  # Heure de fin du film (ex: "22h05")
 
 class TicketBookingUpdate(BaseModel):
     first_name: Optional[str] = None
@@ -1481,9 +1488,8 @@ async def create_booking(booking_data: TicketBookingCreate):
             logging.info(f"Exception 24h pour réservation gratuite: {booking_data.first_name} {booking_data.last_name} - Prix final: {final_price}€")
         
         # Create booking object
-        # Note: entry_time et movie_title ne sont PAS sauvegardés dans bookings
-        # Ils sont récupérés via jointures avec movie_schedules/content_schedules et movies
-        # Jointure: bookings (booking_date, time_slot) -> movie_schedules/content_schedules -> movies
+        # Note: entry_time, start_time, end_time sont maintenant sauvegardés directement dans bookings
+        # pour éviter les jointures et garantir la cohérence des données
         booking_dict = booking_data.dict()
         booking_dict["final_price"] = final_price
         if promo_discount_info:
@@ -1493,10 +1499,26 @@ async def create_booking(booking_data: TicketBookingCreate):
         if content_schedule:
             booking_dict["content_type"] = content_schedule.get("content_type", "movie")
             booking_dict["content_id"] = content_schedule.get("content_id")
+            # Si entry_time, start_time, end_time ne sont pas fournis dans booking_data,
+            # les récupérer depuis le schedule
+            if not booking_dict.get("entry_time") and content_schedule.get("entry_time"):
+                booking_dict["entry_time"] = content_schedule.get("entry_time")
+            if not booking_dict.get("start_time") and content_schedule.get("start_time"):
+                booking_dict["start_time"] = content_schedule.get("start_time")
+            if not booking_dict.get("end_time") and content_schedule.get("end_time"):
+                booking_dict["end_time"] = content_schedule.get("end_time")
         elif movie_schedule:
             # Pour les movie_schedules legacy, c'est toujours un film
             booking_dict["content_type"] = "movie"
             booking_dict["content_id"] = movie_schedule.get("movie_id")
+            # Si entry_time, start_time, end_time ne sont pas fournis dans booking_data,
+            # les récupérer depuis le schedule
+            if not booking_dict.get("entry_time") and movie_schedule.get("entry_time"):
+                booking_dict["entry_time"] = movie_schedule.get("entry_time")
+            if not booking_dict.get("start_time") and movie_schedule.get("start_time"):
+                booking_dict["start_time"] = movie_schedule.get("start_time")
+            if not booking_dict.get("end_time") and movie_schedule.get("end_time"):
+                booking_dict["end_time"] = movie_schedule.get("end_time")
         # Si booking_data contient déjà content_id et content_type, les garder
         elif booking_data.content_id and booking_data.content_type:
             booking_dict["content_type"] = booking_data.content_type
