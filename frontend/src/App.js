@@ -2183,7 +2183,38 @@ function App() {
                           ? "Aucun créneau disponible pour cette date"
                           : "Choisir un créneau"
                       }
-                    />
+                    >
+                      {/* Display the selected time slot with specific schedule info if available */}
+                      {selectedTimeSlot &&
+                        (() => {
+                          // Try to find the schedule in movieSchedules first
+                          const scheduleInList = movieSchedules.find(
+                            (s) => s.schedule.time_slot === selectedTimeSlot
+                          );
+                          // Use preFillData schedule if available, otherwise use the one from the list
+                          const schedule =
+                            preFillData?.schedule || scheduleInList?.schedule;
+
+                          if (schedule?.entry_time && schedule?.start_time) {
+                            return `Entrée: ${schedule.entry_time} • Début: ${
+                              schedule.start_time
+                            }${
+                              schedule.end_time
+                                ? ` • Fin: ${schedule.end_time}`
+                                : ""
+                            }`;
+                          } else if (schedule?.start_time) {
+                            return `Début: ${schedule.start_time}${
+                              schedule.end_time
+                                ? ` • Fin: ${schedule.end_time}`
+                                : ""
+                            }`;
+                          } else if (schedule?.custom_time) {
+                            return `Début: ${schedule.custom_time}`;
+                          }
+                          return getTimeSlotDisplay(selectedTimeSlot);
+                        })()}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="bg-gray-800 border-gray-600">
                     {movieSchedules.length > 0 || isPreFilled ? (
@@ -2196,12 +2227,22 @@ function App() {
                             availability && !availability.is_booking_open;
                           const closureReason = availability?.closure_reason;
 
+                          // Check if this is the pre-filled schedule
+                          const isPreFilledSchedule =
+                            isPreFilled &&
+                            preFillData &&
+                            schedule.schedule.time_slot ===
+                              preFillData.timeSlot &&
+                            schedule.movie?.id === preFillData.movie?.id;
+
                           return (
                             <SelectItem
                               key={schedule.schedule.id}
                               value={schedule.schedule.time_slot}
                               className={`text-white hover:bg-gray-700 ${
                                 isBookingClosed ? "opacity-50" : ""
+                              } ${
+                                isPreFilledSchedule ? "bg-green-900/30" : ""
                               }`}
                               disabled={isBookingClosed}
                             >
@@ -2210,10 +2251,12 @@ function App() {
                                   {schedule.schedule.entry_time &&
                                   schedule.schedule.start_time
                                     ? `Entrée: ${
-                                        actualSchedule.entry_time
-                                      } • Début: ${actualSchedule.start_time}${
-                                        actualSchedule.end_time
-                                          ? ` • Fin: ${actualSchedule.end_time}`
+                                        schedule.schedule.entry_time
+                                      } • Début: ${
+                                        schedule.schedule.start_time
+                                      }${
+                                        schedule.schedule.end_time
+                                          ? ` • Fin: ${schedule.schedule.end_time}`
                                           : ""
                                       }`
                                     : getTimeSlotDisplay(
