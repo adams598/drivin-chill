@@ -4289,12 +4289,11 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
         total_possible_spots = max_capacity_per_show * 2 * 3  # 2 shows, 3 days per week
         occupancy_rate = (total_bookings / max(total_possible_spots, 1)) * 100 if total_possible_spots > 0 else 0
         
-        # Get recent bookings
+        # Get all bookings (not just recent ones) for the bookings tab
         recent_bookings = await db.bookings.find(
             {"is_cancelled": {"$ne": True}},
-            sort=[("created_at", -1)],
-            limit=10
-        ).to_list(10)
+            sort=[("created_at", -1)]
+        ).to_list(1000)
         
         # Enrichir les réservations récentes avec l'heure d'entrée et le titre du film
         enriched_recent_bookings = []
@@ -4344,16 +4343,16 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
             # Si le titre n'a pas été trouvé via content_id, utiliser les jointures comme fallback
             if not movie_title:
                 logging.info(f"🔄 Tentative de récupération du titre via jointures pour booking récent {booking_obj.id}")
-            booking_details = await get_booking_details_from_schedules(
-                booking_obj.booking_date,
-                booking_obj.time_slot,
-                booking_obj.content_id,
-                booking_obj.content_type
-            )
+                booking_details = await get_booking_details_from_schedules(
+                    booking_obj.booking_date,
+                    booking_obj.time_slot,
+                    booking_obj.content_id,
+                    booking_obj.content_type
+                )
                 movie_title = booking_details.get("movie_title")
                 # Si entry_time n'était pas dans le booking, utiliser celui des jointures
                 if not entry_time_from_booking:
-            booking_dict["entry_time"] = booking_details.get("entry_time")
+                    booking_dict["entry_time"] = booking_details.get("entry_time")
                 if not start_time_from_booking:
                     booking_dict["start_time"] = booking_details.get("start_time")
                 if not end_time_from_booking:
@@ -4441,12 +4440,12 @@ async def get_all_admin_bookings(admin = Depends(get_admin_user)):
             # Si le titre n'a pas été trouvé via content_id, utiliser les jointures comme fallback
             if not movie_title:
                 logging.info(f"🔄 Tentative de récupération du titre via jointures pour booking {booking_obj.id}")
-            booking_details = await get_booking_details_from_schedules(
-                booking_obj.booking_date,
-                booking_obj.time_slot,
-                booking_obj.content_id,
-                booking_obj.content_type
-            )
+                booking_details = await get_booking_details_from_schedules(
+                    booking_obj.booking_date,
+                    booking_obj.time_slot,
+                    booking_obj.content_id,
+                    booking_obj.content_type
+                )
                 movie_title = booking_details.get("movie_title")
                 # Si entry_time n'était pas dans le booking, utiliser celui des jointures
                 if not entry_time_from_booking:
