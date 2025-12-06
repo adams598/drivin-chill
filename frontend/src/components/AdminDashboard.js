@@ -633,15 +633,26 @@ const AdminDashboard = ({ onLogout }) => {
                 {(dashboardData?.recent_bookings || bookings).map((booking) => {
                   // Formater l'affichage du créneau : entry_time → time_slot ou juste time_slot
                   const formatTimeSlot = () => {
-                    if (booking.entry_time && booking.time_slot) {
+                    if (
+                      (booking.entry_time && booking.end_time) ||
+                      (booking.entry_time && booking.time_slot)
+                    ) {
                       // Si on a les deux, afficher entry_time → time_slot
-                      if (booking.entry_time !== booking.time_slot) {
+                      if (booking.entry_time !== booking.end_time) {
+                        return `${booking.entry_time} → ${booking.end_time}`;
+                      } else if (booking.entry_time !== booking.time_slot) {
                         return `${booking.entry_time} → ${booking.time_slot}`;
                       }
                       return booking.entry_time;
                     }
                     // Sinon, afficher au moins le time_slot
-                    return booking.entry_time || booking.time_slot || "N/A";
+                    return (
+                      booking.entry_time ||
+                      booking.start_time ||
+                      booking.end_time ||
+                      booking.time_slot ||
+                      "N/A"
+                    );
                   };
 
                   // Formater l'affichage du film
