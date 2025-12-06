@@ -110,6 +110,7 @@ const AdminDashboard = ({ onLogout }) => {
             client: `${booking.first_name} ${booking.last_name}`,
             movie_title: booking.movie_title,
             entry_time: booking.entry_time,
+            end_time: booking.end_time,
             content_id: booking.content_id,
             content_type: booking.content_type,
           });
