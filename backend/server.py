@@ -3191,9 +3191,9 @@ async def get_schedules_by_date(schedule_date: str):
             }).to_list(100)
             
             for schedule in legacy_schedules:
-            parsed_schedule = parse_from_mongo(schedule)
+                parsed_schedule = parse_from_mongo(schedule)
                 movie = await db.movies.find_one({"id": parsed_schedule["movie_id"], "is_active": True})
-            if movie:
+                if movie:
                     # Check if this schedule is already in result (from content_schedules)
                     # to avoid duplicates
                     existing = any(
@@ -3204,10 +3204,10 @@ async def get_schedules_by_date(schedule_date: str):
                         for r in result
                     )
                     if not existing:
-                result.append({
-                    "schedule": MovieSchedule(**parsed_schedule),
-                    "movie": Movie(**parse_from_mongo(movie))
-                })
+                        result.append({
+                            "schedule": MovieSchedule(**parsed_schedule),
+                            "movie": Movie(**parse_from_mongo(movie))
+                        })
         except Exception as e:
             logging.warning(f"Erreur lors de la récupération des movie_schedules legacy: {e}")
         
