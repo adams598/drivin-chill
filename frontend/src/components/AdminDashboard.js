@@ -63,8 +63,24 @@ const AdminDashboard = ({ onLogout }) => {
     setLoading(true);
     try {
       const response = await axios.get(`${API}/admin/dashboard`, { headers: authHeaders });
+      console.log('📊 Dashboard reçu:', response.data);
+      // Log pour les réservations récentes
+      if (response.data?.recent_bookings && response.data.recent_bookings.length > 0) {
+        console.log('🔍 Réservations récentes:', response.data.recent_bookings);
+        response.data.recent_bookings.forEach((booking, index) => {
+          console.log(`📋 Réservation ${index + 1}:`, {
+            id: booking.id,
+            client: `${booking.first_name} ${booking.last_name}`,
+            movie_title: booking.movie_title,
+            entry_time: booking.entry_time,
+            content_id: booking.content_id,
+            content_type: booking.content_type
+          });
+        });
+      }
       setDashboardData(response.data);
     } catch (error) {
+      console.error('❌ Erreur lors du chargement du dashboard:', error);
       toast.error('Erreur lors du chargement du dashboard');
     } finally {
       setLoading(false);
@@ -352,6 +368,15 @@ const AdminDashboard = ({ onLogout }) => {
 
                 // Formater l'affichage du film
                 const formatMovie = () => {
+                  // Log pour déboguer
+                  if (!booking.movie_title && booking.content_type === 'movie') {
+                    console.warn('⚠️ Pas de movie_title pour booking:', {
+                      id: booking.id,
+                      content_id: booking.content_id,
+                      content_type: booking.content_type,
+                      booking_keys: Object.keys(booking)
+                    });
+                  }
                   if (booking.movie_title) {
                     return booking.movie_title;
                   }
@@ -468,7 +493,16 @@ const AdminDashboard = ({ onLogout }) => {
 
                 // Formater l'affichage du film
                 const formatMovie = () => {
-                  if (booking.movie_title) {image.png
+                  // Log pour déboguer
+                  if (!booking.movie_title && booking.content_type === 'movie') {
+                    console.warn('⚠️ Pas de movie_title pour booking:', {
+                      id: booking.id,
+                      content_id: booking.content_id,
+                      content_type: booking.content_type,
+                      booking_keys: Object.keys(booking)
+                    });
+                  }
+                  if (booking.movie_title) {
                     return booking.movie_title;
                   }
                   // Si pas de titre mais on a un content_type, indiquer le type
