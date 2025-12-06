@@ -705,7 +705,7 @@ const AdminDashboard = ({ onLogout }) => {
                         {formatTimeSlot()}
                       </TableCell>
                       <TableCell className="text-sm font-medium">
-                        {booking.nb_personne || 1}
+                        {booking.nb_personne || 0}
                       </TableCell>
                       <TableCell>
                         {getStatusBadge(booking.status, booking.payment_status)}

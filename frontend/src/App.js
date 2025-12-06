@@ -852,9 +852,24 @@ function App() {
 
   // Handle time slot selection with content info (movie or event)
   const handleTimeSlotSelect = async (timeSlot) => {
+    console.log("🔄 handleTimeSlotSelect called with timeSlot:", timeSlot);
+    console.log("📋 Current movieSchedules:", movieSchedules);
+    console.log("🎬 Current selectedMovie:", selectedMovie);
+    console.log("📦 Current preFillData:", preFillData);
+
     setSelectedTimeSlot(timeSlot);
 
-    // Find the schedule for this time slot
+    // First, check if this is the pre-filled time slot
+    if (isPreFilled && preFillData && preFillData.timeSlot === timeSlot) {
+      console.log(
+        "✅ Using pre-filled movie for time slot:",
+        preFillData.movie
+      );
+      setSelectedMovie(preFillData.movie);
+      return;
+    }
+
+    // Find the schedule for this time slot in movieSchedules
     const scheduleForSlot = movieSchedules.find(
       (schedule) => schedule.schedule.time_slot === timeSlot
     );
@@ -863,16 +878,22 @@ function App() {
       // For events, the content is in scheduleForSlot.content
       // For movies, the content is in scheduleForSlot.movie
       const content = scheduleForSlot.content || scheduleForSlot.movie;
+      console.log(
+        "✅ Found schedule in movieSchedules, setting selectedMovie to:",
+        content
+      );
       setSelectedMovie(content);
     } else {
       // If not found in current schedules, try to fetch schedules again for the selected date
       if (selectedDate) {
         try {
           const dateString = format(selectedDate, "yyyy-MM-dd");
+          console.log("🔄 Fetching schedules for date:", dateString);
           const response = await axios.get(
             `${API}/movie-schedules/by-date/${dateString}`
           );
           const fetchedSchedules = response.data;
+          console.log("📋 Fetched schedules:", fetchedSchedules);
 
           // Update state with fetched schedules
           setMovieSchedules(fetchedSchedules);
@@ -884,20 +905,32 @@ function App() {
 
           if (updatedSchedule) {
             const content = updatedSchedule.content || updatedSchedule.movie;
+            console.log(
+              "✅ Found schedule after fetch, setting selectedMovie to:",
+              content
+            );
             setSelectedMovie(content);
           } else {
-            setSelectedMovie(null);
-            // Don't show warning - backend will handle validation
             console.warn(
-              `No schedule found for time slot ${timeSlot} on ${dateString}`
+              `⚠️ No schedule found for time slot ${timeSlot} on ${dateString}`
             );
+            // Don't reset selectedMovie if we have a pre-filled one, as it might be valid
+            if (!isPreFilled || preFillData?.timeSlot !== timeSlot) {
+              setSelectedMovie(null);
+            }
           }
         } catch (error) {
-          console.error("Error fetching schedules:", error);
-          setSelectedMovie(null);
+          console.error("❌ Error fetching schedules:", error);
+          // Don't reset selectedMovie if we have a pre-filled one
+          if (!isPreFilled || preFillData?.timeSlot !== timeSlot) {
+            setSelectedMovie(null);
+          }
         }
       } else {
-        setSelectedMovie(null);
+        // No date selected, but don't reset if we have pre-filled data
+        if (!isPreFilled || preFillData?.timeSlot !== timeSlot) {
+          setSelectedMovie(null);
+        }
       }
     }
   };
@@ -977,7 +1010,11 @@ function App() {
           (selectedMovie && selectedMovie.event_type)
             ? "event"
             : "movie",
-        content_id: selectedMovie ? selectedMovie.id : null,
+        content_id: selectedMovie
+          ? selectedMovie.id
+          : preFillData && preFillData.movie
+          ? preFillData.movie.id
+          : null,
       };
 
       console.log("📝 Booking data to be sent:", bookingData);
