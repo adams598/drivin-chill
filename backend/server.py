@@ -113,27 +113,28 @@ def get_mongodb_client():
     
     # Créer une nouvelle connexion seulement si elle n'existe pas
     if is_production:
-        # En production (Vercel/serverless), utiliser des timeouts plus courts
-        server_selection_timeout = 50000  # 10 secondes
-        connect_timeout = 10000
-        socket_timeout = 30000  # 30 secondes pour les opérations longues
+        # En production (Vercel/serverless), utiliser des timeouts TRÈS courts
+        # ⚠️ CRUCIAL : Timeouts courts pour éviter les timeouts de Vercel (10s max par requête)
+        server_selection_timeout = 5000  # 5 secondes (réduit pour éviter les timeouts)
+        connect_timeout = 5000  # 5 secondes
+        socket_timeout = 20000  # 20 secondes pour les opérations longues
     else:
         # En développement, timeouts plus longs
-        server_selection_timeout = 60000
+        server_selection_timeout = 30000
         connect_timeout = 30000
         socket_timeout = 30000
 
     # Configuration SSL/TLS pour MongoDB Atlas
     is_atlas = 'mongodb+srv://' in mongo_url or 'mongodb.net' in mongo_url
 
-    # Paramètres de connexion MongoDB
+    # Paramètres de connexion MongoDB optimisés pour Vercel serverless
     mongo_kwargs = {
         'serverSelectionTimeoutMS': server_selection_timeout,
         'connectTimeoutMS': connect_timeout,
         'socketTimeoutMS': socket_timeout,
-        'maxPoolSize': 1 if is_production else 10,  # Pool réduit en production
+        'maxPoolSize': 1,  # ⚠️ CRUCIAL : Pool de 1 connexion seulement (même en dev pour cohérence)
         'minPoolSize': 0,  # Pas de connexions persistantes en serverless
-        'maxIdleTimeMS': 45000,  # Fermer les connexions inactives après 45s
+        'maxIdleTimeMS': 30000,  # Fermer les connexions inactives après 30s (réduit)
         'retryWrites': True,  # Activer les retry writes
         'retryReads': True,  # Activer les retry reads
     }
@@ -166,9 +167,9 @@ def get_mongodb_client():
         logging.info(f"✅ Client MongoDB créé (singleton) : {db_name}")
         logging.info(f"   Mode: {'Production (serverless)' if is_production else 'Développement'}")
         logging.info(f"   Type: {'MongoDB Atlas' if is_atlas else 'MongoDB local'}")
-        logging.info(f"   URL: {mongo_url.split('@')[0] + '@***' if '@' in mongo_url else '***'}")
+    logging.info(f"   URL: {mongo_url.split('@')[0] + '@***' if '@' in mongo_url else '***'}")
         return _client, _db
-    except Exception as e:
+except Exception as e:
         logging.error(f"❌ Erreur lors de la création du client MongoDB : {e}")
         logging.error("   Vérifiez votre MONGO_URL dans les variables d'environnement")
         if is_atlas:
@@ -178,12 +179,21 @@ def get_mongodb_client():
             logging.error("   3. L'utilisateur a les permissions nécessaires")
         raise
 
-# Initialiser le client MongoDB au chargement du module
-try:
-    client, db = get_mongodb_client()
-except Exception as e:
-    logging.error(f"❌ Impossible d'initialiser MongoDB : {e}")
-    # Créer des objets None pour éviter les erreurs
+# ⚠️ IMPORTANT : Ne PAS initialiser le client au chargement du module sur Vercel
+# La connexion sera créée de manière lazy (à la première requête) via ensure_mongodb_connection()
+# Cela évite les timeouts au démarrage
+if is_production:
+    # En production, ne pas créer la connexion au chargement (lazy connection)
+    client = None
+    db = None
+    logging.info("🚀 Mode production : connexion MongoDB sera créée à la première requête")
+else:
+    # En développement, créer la connexion au chargement
+    try:
+        client, db = get_mongodb_client()
+        logging.info("✅ Connexion MongoDB initialisée au démarrage (mode développement)")
+    except Exception as e:
+        logging.error(f"❌ Impossible d'initialiser MongoDB : {e}")
     client = None
     db = None
 
@@ -684,14 +694,22 @@ async def ensure_mongodb_connection():
     Dépendance FastAPI pour garantir la connexion MongoDB - CRUCIAL pour Vercel serverless
     Similaire à connectDB() dans l'exemple Node.js
     Garantit qu'une seule connexion est créée et réutilisée
+    
+    ⚠️ IMPORTANT : En production, on ne fait PAS de ping pour éviter les timeouts
+    La connexion sera testée lors de la première opération MongoDB
     """
     global client, db
     
-    # Si le client existe déjà et est connecté, le réutiliser
+    # Si le client existe déjà, le réutiliser directement (pas de ping en production)
     if client is not None and db is not None:
+        # En production, ne pas faire de ping (trop lent, cause des timeouts)
+        # La connexion sera testée lors de la première opération MongoDB
+        if is_production:
+            return db
+        
+        # En développement seulement, vérifier rapidement la connexion
         try:
-            # Vérifier rapidement si la connexion est toujours active (ping rapide)
-            await asyncio.wait_for(client.admin.command('ping'), timeout=2.0)
+            await asyncio.wait_for(client.admin.command('ping'), timeout=1.0)
             return db
         except Exception:
             # Connexion perdue, réinitialiser
@@ -700,11 +718,12 @@ async def ensure_mongodb_connection():
             db = None
     
     # Créer ou récupérer le client MongoDB (singleton)
+    # Le client sera créé mais la connexion sera établie de manière lazy (à la première opération)
     try:
         client, db = get_mongodb_client()
         return db
     except Exception as e:
-        logging.error(f"❌ Impossible de connecter à MongoDB : {e}")
+        logging.error(f"❌ Impossible de créer le client MongoDB : {e}")
         raise HTTPException(
             status_code=503,
             detail="Base de données MongoDB non disponible. Veuillez réessayer dans quelques instants."
@@ -727,7 +746,7 @@ async def check_mongodb_connection(max_retries: int = 2):
             client, db = get_mongodb_client()
         except Exception as e:
             logging.warning(f"⚠️  MongoDB client non initialisé : {e}")
-            return False
+        return False
     
     # En production, utiliser un timeout plus court pour éviter les timeouts de la plateforme
     timeout = 10.0 if is_production else 30.0
@@ -738,8 +757,8 @@ async def check_mongodb_connection(max_retries: int = 2):
             await asyncio.wait_for(client.admin.command('ping'), timeout=timeout)
             if attempt > 0:
                 logging.info(f"✅ Connexion MongoDB établie après {attempt + 1} tentative(s)")
-            return True
-        except asyncio.TimeoutError:
+        return True
+    except asyncio.TimeoutError:
             if attempt < max_retries:
                 wait_time = (attempt + 1) * 0.5  # Backoff exponentiel
                 logging.warning(f"⚠️  Timeout MongoDB (tentative {attempt + 1}/{max_retries + 1}), réessai dans {wait_time}s...")
@@ -750,10 +769,10 @@ async def check_mongodb_connection(max_retries: int = 2):
                     logging.warning("⚠️  Timeout lors de la connexion MongoDB après tous les essais")
                     logging.warning("   La connexion sera réessayée à la prochaine requête")
                 else:
-                    logging.error("❌ Timeout lors de la connexion MongoDB")
+        logging.error("❌ Timeout lors de la connexion MongoDB")
                     logging.error("   Vérifiez que MongoDB est démarré et que MONGO_URL est correct")
-                return False
-        except Exception as e:
+        return False
+    except Exception as e:
             error_msg = str(e).lower()
             # Erreurs SSL/TLS spécifiques
             if 'ssl' in error_msg or 'tls' in error_msg or 'handshake' in error_msg:
@@ -777,7 +796,7 @@ async def check_mongodb_connection(max_retries: int = 2):
                     logging.warning(f"⚠️  Connexion MongoDB non disponible après tous les essais: {type(e).__name__}")
                     return False
             else:
-                logging.error(f"❌ Erreur de connexion MongoDB : {e}")
+        logging.error(f"❌ Erreur de connexion MongoDB : {e}")
                 logging.error("   Vérifiez votre MONGO_URL dans les variables d'environnement")
                 if attempt < max_retries:
                     wait_time = (attempt + 1) * 0.5
@@ -785,7 +804,7 @@ async def check_mongodb_connection(max_retries: int = 2):
                     continue
                 return False
     
-    return False
+        return False
 
 # Helper function to get current time slot settings
 async def get_time_slot_settings():
@@ -1066,10 +1085,10 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
         # 1) Si on a content_id et content_type, chercher directement (priorité absolue)
         if booking.content_id and booking.content_type:
             final_schedule = await db.content_schedules.find_one({
-                "date": booking_date_str,
+            "date": booking_date_str,
                 "content_id": booking.content_id,
                 "content_type": booking.content_type,
-                "is_active": True
+            "is_active": True
             })
             if not final_schedule:
                 final_schedule = await db.content_schedules.find_one({
@@ -1081,6 +1100,22 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
             if final_schedule:
                 logging.info(f"📧 ✅ Schedule trouvé directement via content_id={booking.content_id}, content_type={booking.content_type}")
                 logging.info(f"📧 Schedule contenu: entry_time={final_schedule.get('entry_time')}, start_time={final_schedule.get('start_time')}, end_time={final_schedule.get('end_time')}")
+                # Récupérer immédiatement le titre du film/événement depuis le schedule trouvé
+                if final_schedule.get("content_type") == "movie" and final_schedule.get("content_id"):
+                    movie = await db.movies.find_one({"id": final_schedule.get("content_id")})
+                    if movie:
+                        movie_title_final = movie.get("title")
+                        logging.info(f"📧 ✅ Titre du film récupéré immédiatement: {movie_title_final}")
+                elif final_schedule.get("content_type") == "event" and final_schedule.get("content_id"):
+                    event = await db.events.find_one({"id": final_schedule.get("content_id")})
+                    if event:
+                        movie_title_final = event.get("title")
+                        logging.info(f"📧 ✅ Titre de l'événement récupéré immédiatement: {movie_title_final}")
+                elif final_schedule.get("movie_id"):
+                    movie = await db.movies.find_one({"id": final_schedule.get("movie_id")})
+                    if movie:
+                        movie_title_final = movie.get("title")
+                        logging.info(f"📧 ✅ Titre du film récupéré immédiatement (legacy): {movie_title_final}")
         
         # 2) Si pas trouvé, récupérer movie_title d'abord pour chercher précisément
         if not final_schedule:
@@ -1165,9 +1200,9 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
             # Si toujours pas trouvé, chercher dans movie_schedules legacy
             if not final_schedule:
                 final_schedule = await db.movie_schedules.find_one({
-                    "date": booking_date_str,
+                "date": booking_date_str,
                     "time_slot": time_slot_str,
-                    "is_active": True
+                "is_active": True
                 })
                 if not final_schedule:
                     final_schedule = await db.movie_schedules.find_one({
@@ -1901,7 +1936,10 @@ async def update_booking(booking_id: str, update_data: TicketBookingUpdate, admi
         raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour: {str(e)}")
 
 @api_router.post("/bookings/{booking_id}/cancel")
-async def cancel_booking(booking_id: str):
+async def cancel_booking(
+    booking_id: str,
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         result = await db.bookings.update_one(
             {"id": booking_id},
@@ -1916,7 +1954,11 @@ async def cancel_booking(booking_id: str):
         raise HTTPException(status_code=500, detail=f"Erreur lors de l'annulation: {str(e)}")
 
 @api_router.get("/availability")
-async def check_availability(booking_date: str, time_slot: TimeSlot):
+async def check_availability(
+    booking_date: str, 
+    time_slot: TimeSlot,
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         # Parse date
         check_date = datetime.fromisoformat(booking_date).date()
@@ -2011,7 +2053,10 @@ async def check_availability(booking_date: str, time_slot: TimeSlot):
 
 # Payment endpoints
 @api_router.post("/payments/create-checkout")
-async def create_payment_checkout(request: PaymentRequest):
+async def create_payment_checkout(
+    request: PaymentRequest,
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         # Get booking details
         booking = await db.bookings.find_one({"id": request.booking_id})
@@ -2164,7 +2209,10 @@ async def create_payment_checkout(request: PaymentRequest):
         raise HTTPException(status_code=500, detail=f"Erreur lors de la création du paiement: {str(e)}")
 
 @api_router.get("/payments/status/{session_id}")
-async def get_payment_status(session_id: str):
+async def get_payment_status(
+    session_id: str,
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         if not stripe_api_key:
             raise HTTPException(status_code=500, detail="Configuration de paiement manquante")
@@ -2229,7 +2277,10 @@ async def get_payment_status(session_id: str):
         raise HTTPException(status_code=500, detail=f"Erreur lors de la vérification du paiement: {str(e)}")
 
 @api_router.post("/webhook/stripe")
-async def stripe_webhook(request: Request):
+async def stripe_webhook(
+    request: Request,
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         if not stripe_api_key:
             raise HTTPException(status_code=500, detail="Configuration de paiement manquante")
@@ -2313,7 +2364,11 @@ async def stripe_webhook(request: Request):
 
 # Event management endpoints
 @api_router.post("/events", response_model=Event)
-async def create_event(event_data: EventCreate, admin = Depends(get_admin_user)):
+async def create_event(
+    event_data: EventCreate, 
+    admin = Depends(get_admin_user),
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         event_obj = Event(**event_data.dict())
         event_mongo = prepare_for_mongo(event_obj.dict())
@@ -2325,7 +2380,10 @@ async def create_event(event_data: EventCreate, admin = Depends(get_admin_user))
         raise HTTPException(status_code=500, detail=f"Erreur lors de la création de l'événement: {str(e)}")
 
 @api_router.get("/events", response_model=List[Event])
-async def get_events(active_only: bool = True):
+async def get_events(
+    active_only: bool = True,
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         filter_query = {"is_active": True} if active_only else {}
         events = await db.events.find(filter_query).to_list(1000)
@@ -2334,7 +2392,10 @@ async def get_events(active_only: bool = True):
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des événements: {str(e)}")
 
 @api_router.get("/events/{event_id}", response_model=Event)
-async def get_event(event_id: str):
+async def get_event(
+    event_id: str,
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         event = await db.events.find_one({"id": event_id})
         if not event:
@@ -2346,7 +2407,12 @@ async def get_event(event_id: str):
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération de l'événement: {str(e)}")
 
 @api_router.put("/events/{event_id}", response_model=Event)
-async def update_event(event_id: str, update_data: EventUpdate, admin = Depends(get_admin_user)):
+async def update_event(
+    event_id: str, 
+    update_data: EventUpdate, 
+    admin = Depends(get_admin_user),
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         update_dict = {k: v for k, v in update_data.dict().items() if v is not None}
         if not update_dict:
@@ -2372,7 +2438,11 @@ async def update_event(event_id: str, update_data: EventUpdate, admin = Depends(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour: {str(e)}")
 
 @api_router.delete("/events/{event_id}")
-async def delete_event(event_id: str, admin = Depends(get_admin_user)):
+async def delete_event(
+    event_id: str, 
+    admin = Depends(get_admin_user),
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         # Soft delete - just mark as inactive
         result = await db.events.update_one(
@@ -2392,7 +2462,10 @@ async def delete_event(event_id: str, admin = Depends(get_admin_user)):
 
 # Promo code management endpoints
 @api_router.get("/admin/promo-codes", response_model=List[PromoCode])
-async def get_promo_codes(admin = Depends(get_admin_user)):
+async def get_promo_codes(
+    admin = Depends(get_admin_user),
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         codes = await db.promo_codes.find({"is_active": True}).to_list(1000)
         return [PromoCode(**parse_from_mongo(code)) for code in codes]
@@ -2400,7 +2473,11 @@ async def get_promo_codes(admin = Depends(get_admin_user)):
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des codes promo: {str(e)}")
 
 @api_router.post("/admin/promo-codes", response_model=PromoCode)
-async def create_promo_code(promo_data: PromoCodeCreate, admin = Depends(get_admin_user)):
+async def create_promo_code(
+    promo_data: PromoCodeCreate, 
+    admin = Depends(get_admin_user),
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         # Check if code already exists
         existing_code = await db.promo_codes.find_one({"code": promo_data.code, "is_active": True})
@@ -2436,7 +2513,12 @@ async def create_promo_code(promo_data: PromoCodeCreate, admin = Depends(get_adm
         raise HTTPException(status_code=500, detail=f"Erreur lors de la création: {str(e)}")
 
 @api_router.put("/admin/promo-codes/{code_id}", response_model=PromoCode)
-async def update_promo_code(code_id: str, promo_data: PromoCodeUpdate, admin = Depends(get_admin_user)):
+async def update_promo_code(
+    code_id: str, 
+    promo_data: PromoCodeUpdate, 
+    admin = Depends(get_admin_user),
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         # Check if promo code exists
         existing_code = await db.promo_codes.find_one({"id": code_id, "is_active": True})
@@ -2466,7 +2548,11 @@ async def update_promo_code(code_id: str, promo_data: PromoCodeUpdate, admin = D
         raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour: {str(e)}")
 
 @api_router.delete("/admin/promo-codes/{code_id}")
-async def delete_promo_code(code_id: str, admin = Depends(get_admin_user)):
+async def delete_promo_code(
+    code_id: str, 
+    admin = Depends(get_admin_user),
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         # Soft delete - just mark as inactive
         result = await db.promo_codes.update_one(
@@ -2485,7 +2571,10 @@ async def delete_promo_code(code_id: str, admin = Depends(get_admin_user)):
         raise HTTPException(status_code=500, detail=f"Erreur lors de la suppression: {str(e)}")
 
 @api_router.post("/validate-promo-code", response_model=PromoCodeResponse)
-async def validate_promo_code(validation_data: PromoCodeValidation):
+async def validate_promo_code(
+    validation_data: PromoCodeValidation,
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         # Find the promo code
         promo_code = await db.promo_codes.find_one({
@@ -2584,7 +2673,10 @@ async def get_movies(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des films: {str(e)}")
 
 @api_router.get("/movies/{movie_id}", response_model=Movie)
-async def get_movie(movie_id: str):
+async def get_movie(
+    movie_id: str,
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         movie = await db.movies.find_one({"id": movie_id})
         if not movie:
@@ -2596,7 +2688,12 @@ async def get_movie(movie_id: str):
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération du film: {str(e)}")
 
 @api_router.put("/movies/{movie_id}", response_model=Movie)
-async def update_movie(movie_id: str, update_data: MovieUpdate, admin = Depends(get_admin_user)):
+async def update_movie(
+    movie_id: str, 
+    update_data: MovieUpdate, 
+    admin = Depends(get_admin_user),
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         update_dict = {k: v for k, v in update_data.dict().items() if v is not None}
         if not update_dict:
@@ -2622,7 +2719,11 @@ async def update_movie(movie_id: str, update_data: MovieUpdate, admin = Depends(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour: {str(e)}")
 
 @api_router.delete("/movies/{movie_id}")
-async def delete_movie(movie_id: str, admin = Depends(get_admin_user)):
+async def delete_movie(
+    movie_id: str, 
+    admin = Depends(get_admin_user),
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         # Soft delete - just mark as inactive
         result = await db.movies.update_one(
@@ -2642,14 +2743,11 @@ async def delete_movie(movie_id: str, admin = Depends(get_admin_user)):
 
 # Content schedule endpoints (movies and events)
 @api_router.post("/content-schedules", response_model=ContentSchedule)
-async def create_content_schedule(schedule_data: ContentScheduleCreate, admin = Depends(get_admin_user)):
-    # Vérifier la connexion MongoDB
-    if not await check_mongodb_connection():
-        raise HTTPException(
-            status_code=503,
-            detail="Base de données MongoDB non disponible. Vérifiez votre connexion et votre fichier .env"
-        )
-    
+async def create_content_schedule(
+    schedule_data: ContentScheduleCreate, 
+    admin = Depends(get_admin_user),
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         # Check if content exists (movie or event)
         if schedule_data.content_type == "movie":
@@ -2706,7 +2804,11 @@ async def create_content_schedule(schedule_data: ContentScheduleCreate, admin = 
         raise HTTPException(status_code=500, detail=f"Erreur lors de la programmation: {str(e)}")
 
 @api_router.get("/content-schedules", response_model=List[ContentScheduleWithDetails])
-async def get_content_schedules(date_from: Optional[str] = None, date_to: Optional[str] = None):
+async def get_content_schedules(
+    date_from: Optional[str] = None, 
+    date_to: Optional[str] = None,
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         # Build filter query
         filter_query = {"is_active": True}
@@ -2770,7 +2872,11 @@ async def get_content_schedules(date_from: Optional[str] = None, date_to: Option
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération de la programmation: {str(e)}")
 
 @api_router.delete("/content-schedules/{schedule_id}")
-async def delete_content_schedule(schedule_id: str, admin = Depends(get_admin_user)):
+async def delete_content_schedule(
+    schedule_id: str, 
+    admin = Depends(get_admin_user),
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         result = await db.content_schedules.update_one(
             {"id": schedule_id},
@@ -2785,8 +2891,6 @@ async def delete_content_schedule(schedule_id: str, admin = Depends(get_admin_us
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur lors de la suppression: {str(e)}")
-
         raise HTTPException(status_code=500, detail=f"Erreur lors de la suppression: {str(e)}")
 
 @api_router.get("/weekly-schedule", response_model=List[ContentScheduleWithDetails])
@@ -3224,7 +3328,10 @@ async def test_email_sending(
 
 # Movie suggestions endpoints
 @api_router.post("/movie-suggestions", response_model=MovieSuggestion)
-async def create_movie_suggestion(suggestion_data: MovieSuggestionCreate):
+async def create_movie_suggestion(
+    suggestion_data: MovieSuggestionCreate,
+    db = Depends(ensure_mongodb_connection)
+):
     """Create a new movie suggestion from a spectator"""
     try:
         suggestion = MovieSuggestion(**suggestion_data.dict())
@@ -3240,7 +3347,11 @@ async def create_movie_suggestion(suggestion_data: MovieSuggestionCreate):
         raise HTTPException(status_code=500, detail=f"Erreur lors de la création de la suggestion: {str(e)}")
 
 @api_router.get("/admin/movie-suggestions", response_model=List[MovieSuggestion])
-async def get_movie_suggestions(admin = Depends(get_admin_user), status: Optional[str] = None):
+async def get_movie_suggestions(
+    admin = Depends(get_admin_user), 
+    status: Optional[str] = None,
+    db = Depends(ensure_mongodb_connection)
+):
     """Get all movie suggestions (admin only)"""
     try:
         filter_query = {}
@@ -3255,7 +3366,12 @@ async def get_movie_suggestions(admin = Depends(get_admin_user), status: Optiona
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des suggestions: {str(e)}")
 
 @api_router.put("/admin/movie-suggestions/{suggestion_id}", response_model=MovieSuggestion)
-async def update_movie_suggestion(suggestion_id: str, update_data: MovieSuggestionUpdate, admin = Depends(get_admin_user)):
+async def update_movie_suggestion(
+    suggestion_id: str, 
+    update_data: MovieSuggestionUpdate, 
+    admin = Depends(get_admin_user),
+    db = Depends(ensure_mongodb_connection)
+):
     """Update a movie suggestion status or add admin notes"""
     try:
         # Build update data
@@ -3284,7 +3400,11 @@ async def update_movie_suggestion(suggestion_id: str, update_data: MovieSuggesti
         raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour: {str(e)}")
 
 @api_router.delete("/admin/movie-suggestions/{suggestion_id}")
-async def delete_movie_suggestion(suggestion_id: str, admin = Depends(get_admin_user)):
+async def delete_movie_suggestion(
+    suggestion_id: str, 
+    admin = Depends(get_admin_user),
+    db = Depends(ensure_mongodb_connection)
+):
     """Delete a movie suggestion"""
     try:
         result = await db.movie_suggestions.delete_one({"id": suggestion_id})
@@ -3329,7 +3449,11 @@ def times_overlap(start1: Optional[int], end1: Optional[int], start2: Optional[i
     return not (end1 <= start2 or end2 <= start1)
 
 @api_router.post("/movie-schedules", response_model=MovieSchedule)
-async def create_movie_schedule(schedule_data: MovieScheduleCreate, admin = Depends(get_admin_user)):
+async def create_movie_schedule(
+    schedule_data: MovieScheduleCreate, 
+    admin = Depends(get_admin_user),
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         # Check if movie exists
         movie = await db.movies.find_one({"id": schedule_data.movie_id, "is_active": True})
@@ -3409,7 +3533,11 @@ async def create_movie_schedule(schedule_data: MovieScheduleCreate, admin = Depe
         raise HTTPException(status_code=500, detail=f"Erreur lors de la programmation: {str(e)}")
 
 @api_router.get("/movie-schedules", response_model=List[MovieScheduleWithMovie])
-async def get_movie_schedules(date_from: Optional[str] = None, date_to: Optional[str] = None):
+async def get_movie_schedules(
+    date_from: Optional[str] = None, 
+    date_to: Optional[str] = None,
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         # Build filter query
         filter_query = {"is_active": True}
@@ -3466,7 +3594,12 @@ async def get_schedules_by_date(schedule_date: str):
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération: {str(e)}")
 
 @api_router.put("/movie-schedules/{schedule_id}", response_model=MovieSchedule)
-async def update_movie_schedule(schedule_id: str, update_data: MovieScheduleUpdate, admin = Depends(get_admin_user)):
+async def update_movie_schedule(
+    schedule_id: str, 
+    update_data: MovieScheduleUpdate, 
+    admin = Depends(get_admin_user),
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         # Vérifier que la programmation existe
         existing_schedule = await db.movie_schedules.find_one({"id": schedule_id, "is_active": True})
@@ -3583,7 +3716,11 @@ async def update_movie_schedule(schedule_id: str, update_data: MovieScheduleUpda
         raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour: {str(e)}")
 
 @api_router.delete("/movie-schedules/{schedule_id}")
-async def delete_movie_schedule(schedule_id: str, admin = Depends(get_admin_user)):
+async def delete_movie_schedule(
+    schedule_id: str, 
+    admin = Depends(get_admin_user),
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         result = await db.movie_schedules.update_one(
             {"id": schedule_id},
@@ -3602,7 +3739,11 @@ async def delete_movie_schedule(schedule_id: str, admin = Depends(get_admin_user
 
 # QR Code scanning endpoints
 @api_router.post("/scan-qr/{booking_id}")
-async def scan_qr_code(booking_id: str, admin = Depends(get_admin_user)):
+async def scan_qr_code(
+    booking_id: str, 
+    admin = Depends(get_admin_user),
+    db = Depends(ensure_mongodb_connection)
+):
     try:
         # Find the booking
         booking = await db.bookings.find_one({"id": booking_id})
@@ -3658,7 +3799,10 @@ async def scan_qr_code(booking_id: str, admin = Depends(get_admin_user)):
         raise HTTPException(status_code=500, detail=f"Erreur lors du scan: {str(e)}")
 
 @api_router.get("/validate-qr/{booking_id}")
-async def validate_qr_code(booking_id: str):
+async def validate_qr_code(
+    booking_id: str,
+    db = Depends(ensure_mongodb_connection)
+):
     """Endpoint public pour vérifier la validité d'un QR code (sans admin)"""
     try:
         booking = await db.bookings.find_one({"id": booking_id})
@@ -4099,7 +4243,7 @@ async def get_booking_details_from_schedules(
                 logging.info(f"✅ Événement trouvé directement via content_id: {movie_title_result}")
             else:
                 logging.warning(f"⚠️ Événement non trouvé avec content_id={content_id}")
-
+    
         # Tentative 1 : récupérer d'abord le content_schedule correspondant exactement
         # au couple (date, content_id, content_type). Cela permet d'avoir un entry_time
         # spécifique par film même si plusieurs films partagent le même time_slot.
@@ -4169,18 +4313,18 @@ async def get_booking_details_from_schedules(
     
     # Si on n'a pas encore trouvé, chercher normalement
     if not content_schedule:
+    content_schedule = await db.content_schedules.find_one({
+        "date": booking_date_str,
+        "time_slot": {"$in": [normalized_time_slot, time_slot_str]},
+        "is_active": True
+    })
+    
+    # Si pas trouvé avec is_active=True, chercher sans cette condition (pour les anciennes réservations)
+    if not content_schedule:
         content_schedule = await db.content_schedules.find_one({
             "date": booking_date_str,
-            "time_slot": {"$in": [normalized_time_slot, time_slot_str]},
-            "is_active": True
+            "time_slot": {"$in": [normalized_time_slot, time_slot_str]}
         })
-        
-        # Si pas trouvé avec is_active=True, chercher sans cette condition (pour les anciennes réservations)
-        if not content_schedule:
-            content_schedule = await db.content_schedules.find_one({
-                "date": booking_date_str,
-                "time_slot": {"$in": [normalized_time_slot, time_slot_str]}
-            })
     
     if content_schedule:
         logging.info(f"✅ Trouvé content_schedule: {content_schedule.get('content_id')}, type: {content_schedule.get('content_type')}")
@@ -4478,7 +4622,7 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
             if stored_entry_time:
                 booking_dict["entry_time"] = stored_entry_time
             else:
-                booking_dict["entry_time"] = booking_details.get("entry_time")
+            booking_dict["entry_time"] = booking_details.get("entry_time")
             
             booking_dict["movie_title"] = booking_details.get("movie_title")
             
@@ -4641,20 +4785,20 @@ async def startup_db_tasks():
     try:
         # Utiliser un timeout court pour ne pas bloquer le démarrage
         if await asyncio.wait_for(check_mongodb_connection(), timeout=5.0):
-            logging.info("✅ Connexion MongoDB établie")
-            try:
-                await migrate_legacy_time_slots()
-            except Exception as exc:
-                logging.error(
-                    "Échec de la migration automatique des créneaux legacy: %s",
-                    exc,
-                )
-        else:
-            logging.warning("⚠️  MongoDB non disponible - certaines fonctionnalités seront limitées")
-            logging.warning("   Pour utiliser l'application complètement :")
-            logging.warning("   1. Installez MongoDB localement, OU")
-            logging.warning("   2. Utilisez MongoDB Atlas (gratuit) : https://www.mongodb.com/cloud/atlas")
-            logging.warning("   3. Configurez MONGO_URL dans votre fichier .env")
+        logging.info("✅ Connexion MongoDB établie")
+        try:
+            await migrate_legacy_time_slots()
+        except Exception as exc:
+            logging.error(
+                "Échec de la migration automatique des créneaux legacy: %s",
+                exc,
+            )
+    else:
+        logging.warning("⚠️  MongoDB non disponible - certaines fonctionnalités seront limitées")
+        logging.warning("   Pour utiliser l'application complètement :")
+        logging.warning("   1. Installez MongoDB localement, OU")
+        logging.warning("   2. Utilisez MongoDB Atlas (gratuit) : https://www.mongodb.com/cloud/atlas")
+        logging.warning("   3. Configurez MONGO_URL dans votre fichier .env")
     except asyncio.TimeoutError:
         logging.warning("⚠️  Timeout lors de la vérification MongoDB au démarrage")
         logging.warning("   La connexion sera réessayée à la première requête")
