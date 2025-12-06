@@ -94,98 +94,96 @@ encoded_mongo_url = encode_mongo_url(mongo_url)
 # La connexion sera établie de manière lazy (à la première requête)
 is_production = os.environ.get('VERCEL') or os.environ.get('ENVIRONMENT') == 'production'
 
-if is_production:
-    # En production (Vercel/serverless), utiliser des timeouts plus courts
-    # La connexion sera établie de manière lazy
-    server_selection_timeout = 10000  # 10 secondes
-    connect_timeout = 10000
-    socket_timeout = 30000  # 30 secondes pour les opérations longues
-else:
-    # En développement, timeouts plus longs
-    server_selection_timeout = 30000
-    connect_timeout = 30000
-    socket_timeout = 30000
+# ⚠️ IMPORTANT : Pattern Singleton pour MongoDB sur Vercel
+# Sur Vercel (serverless), chaque requête peut être une nouvelle instance du module
+# Il faut garantir qu'une seule connexion MongoDB est créée et réutilisée
+_client = None
+_db = None
 
-# Configuration SSL/TLS pour MongoDB Atlas
-# MongoDB Atlas nécessite SSL/TLS par défaut
-is_atlas = 'mongodb+srv://' in mongo_url or 'mongodb.net' in mongo_url
+def get_mongodb_client():
+    """
+    Singleton pour obtenir le client MongoDB - CRUCIAL pour Vercel serverless
+    Garantit qu'une seule connexion est créée et réutilisée entre les requêtes
+    """
+    global _client, _db
+    
+    # Si le client existe déjà, le réutiliser
+    if _client is not None and _db is not None:
+        return _client, _db
+    
+    # Créer une nouvelle connexion seulement si elle n'existe pas
+    if is_production:
+        # En production (Vercel/serverless), utiliser des timeouts plus courts
+        server_selection_timeout = 10000  # 10 secondes
+        connect_timeout = 10000
+        socket_timeout = 30000  # 30 secondes pour les opérations longues
+    else:
+        # En développement, timeouts plus longs
+        server_selection_timeout = 30000
+        connect_timeout = 30000
+        socket_timeout = 30000
 
-# Paramètres de connexion MongoDB
-mongo_kwargs = {
-    'serverSelectionTimeoutMS': server_selection_timeout,
-    'connectTimeoutMS': connect_timeout,
-    'socketTimeoutMS': socket_timeout,
-    'maxPoolSize': 1 if is_production else 10,  # Pool réduit en production
-    'minPoolSize': 0,  # Pas de connexions persistantes en serverless
-    'maxIdleTimeMS': 45000,  # Fermer les connexions inactives après 45s
-    'retryWrites': True,  # Activer les retry writes
-    'retryReads': True,  # Activer les retry reads
-}
+    # Configuration SSL/TLS pour MongoDB Atlas
+    is_atlas = 'mongodb+srv://' in mongo_url or 'mongodb.net' in mongo_url
 
-# Pour MongoDB Atlas, SSL/TLS est automatique avec mongodb+srv://
-# Mais on peut ajouter des paramètres explicites si nécessaire
-# Note: Motor utilise 'tls' pour les versions récentes, 'ssl' pour les anciennes
-if is_atlas:
-    # Vérifier si l'URL contient déjà des paramètres TLS
-    url_lower = encoded_mongo_url.lower()
-    if 'tls=true' not in url_lower and 'ssl=true' not in url_lower:
-        # Ajouter les paramètres TLS explicites seulement si pas déjà présents
-        # Pour mongodb+srv://, TLS est automatique, mais on peut forcer la validation
-        try:
-            # Motor 3.0+ utilise 'tls', versions antérieures utilisent 'ssl'
-            # On essaie 'tls' d'abord, qui est la norme moderne
-            mongo_kwargs.update({
-                'tls': True,  # Activer TLS pour MongoDB Atlas
-                'tlsAllowInvalidCertificates': False,  # Valider les certificats
-                'tlsAllowInvalidHostnames': False,  # Valider les hostnames
-            })
-            logging.info("   Configuration MongoDB Atlas détectée - SSL/TLS activé")
-        except Exception:
-            # Fallback pour les anciennes versions de Motor
+    # Paramètres de connexion MongoDB
+    mongo_kwargs = {
+        'serverSelectionTimeoutMS': server_selection_timeout,
+        'connectTimeoutMS': connect_timeout,
+        'socketTimeoutMS': socket_timeout,
+        'maxPoolSize': 1 if is_production else 10,  # Pool réduit en production
+        'minPoolSize': 0,  # Pas de connexions persistantes en serverless
+        'maxIdleTimeMS': 45000,  # Fermer les connexions inactives après 45s
+        'retryWrites': True,  # Activer les retry writes
+        'retryReads': True,  # Activer les retry reads
+    }
+
+    # Pour MongoDB Atlas, SSL/TLS est automatique avec mongodb+srv://
+    if is_atlas:
+        url_lower = encoded_mongo_url.lower()
+        if 'tls=true' not in url_lower and 'ssl=true' not in url_lower:
             try:
                 mongo_kwargs.update({
-                    'ssl': True,
-                    'ssl_cert_reqs': 2,  # CERT_REQUIRED
+                    'tls': True,
+                    'tlsAllowInvalidCertificates': False,
+                    'tlsAllowInvalidHostnames': False,
                 })
-                logging.info("   Configuration MongoDB Atlas détectée - SSL activé (mode legacy)")
+                logging.info("   Configuration MongoDB Atlas - SSL/TLS activé")
             except Exception:
-                logging.warning("   Impossible de configurer SSL/TLS explicitement, utilisation des paramètres par défaut")
-    else:
-        logging.info("   Configuration MongoDB Atlas détectée - SSL/TLS déjà configuré dans l'URL")
+                try:
+                    mongo_kwargs.update({
+                        'ssl': True,
+                        'ssl_cert_reqs': 2,
+                    })
+                    logging.info("   Configuration MongoDB Atlas - SSL activé (mode legacy)")
+                except Exception:
+                    logging.warning("   Utilisation des paramètres SSL/TLS par défaut")
 
+    try:
+        # Créer le client MongoDB UNE SEULE FOIS
+        _client = AsyncIOMotorClient(encoded_mongo_url, **mongo_kwargs)
+        _db = _client[db_name]
+        logging.info(f"✅ Client MongoDB créé (singleton) : {db_name}")
+        logging.info(f"   Mode: {'Production (serverless)' if is_production else 'Développement'}")
+        logging.info(f"   Type: {'MongoDB Atlas' if is_atlas else 'MongoDB local'}")
+        logging.info(f"   URL: {mongo_url.split('@')[0] + '@***' if '@' in mongo_url else '***'}")
+        return _client, _db
+    except Exception as e:
+        logging.error(f"❌ Erreur lors de la création du client MongoDB : {e}")
+        logging.error("   Vérifiez votre MONGO_URL dans les variables d'environnement")
+        if is_atlas:
+            logging.error("   Pour MongoDB Atlas, assurez-vous que :")
+            logging.error("   1. L'URL contient 'mongodb+srv://'")
+            logging.error("   2. Les adresses IP de Vercel sont autorisées (0.0.0.0/0 dans Network Access)")
+            logging.error("   3. L'utilisateur a les permissions nécessaires")
+        raise
+
+# Initialiser le client MongoDB au chargement du module
 try:
-    # Créer le client MongoDB avec les paramètres optimisés
-    client = AsyncIOMotorClient(encoded_mongo_url, **mongo_kwargs)
-    db = client[db_name]
-    logging.info(f"✅ Connexion MongoDB configurée : {db_name}")
-    logging.info(f"   Mode: {'Production (serverless)' if is_production else 'Développement'}")
-    logging.info(f"   Type: {'MongoDB Atlas' if is_atlas else 'MongoDB local'}")
-    logging.info(f"   URL: {mongo_url.split('@')[0] + '@***' if '@' in mongo_url else '***'}")
-    # Ne pas tester la connexion immédiatement en production (lazy connection)
-    if not is_production:
-        # En développement, tester la connexion au démarrage
-        try:
-            import asyncio
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Si la boucle tourne déjà, ne pas bloquer
-                logging.info("   Connexion sera testée à la première requête")
-            else:
-                # Tester la connexion de manière synchrone (dev seulement)
-                logging.info("   Test de connexion en cours...")
-        except Exception:
-            pass
+    client, db = get_mongodb_client()
 except Exception as e:
-    logging.error(f"❌ Erreur lors de la configuration MongoDB : {e}")
-    logging.error("   Le serveur démarrera mais les requêtes MongoDB échoueront")
-    logging.error("   Vérifiez votre MONGO_URL dans les variables d'environnement")
-    if is_atlas:
-        logging.error("   Pour MongoDB Atlas, assurez-vous que :")
-        logging.error("   1. L'URL contient 'mongodb+srv://'")
-        logging.error("   2. Les adresses IP de Vercel sont autorisées (0.0.0.0/0 dans Network Access)")
-        logging.error("   3. L'utilisateur a les permissions nécessaires")
-    logging.error("   Si votre mot de passe contient @, :, /, etc., encodez-les en URL")
-    # Créer des objets None pour éviter les erreurs, mais ils ne fonctionneront pas
+    logging.error(f"❌ Impossible d'initialiser MongoDB : {e}")
+    # Créer des objets None pour éviter les erreurs
     client = None
     db = None
 
@@ -687,9 +685,15 @@ async def get_admin_user(credentials = Depends(security)):
 # Helper function to check MongoDB connection
 async def check_mongodb_connection(max_retries: int = 2):
     """Check if MongoDB is available - optimisé pour la production avec retry"""
+    global client, db
+    
+    # Si le client n'est pas initialisé, essayer de le créer
     if db is None or client is None:
-        logging.warning("⚠️  MongoDB client non initialisé")
-        return False
+        try:
+            client, db = get_mongodb_client()
+        except Exception as e:
+            logging.warning(f"⚠️  MongoDB client non initialisé : {e}")
+            return False
     
     # En production, utiliser un timeout plus court pour éviter les timeouts de la plateforme
     timeout = 10.0 if is_production else 30.0
