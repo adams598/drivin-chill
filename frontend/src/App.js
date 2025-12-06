@@ -167,8 +167,6 @@ function App() {
   }, []);
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState("");
-  // Nouvel état : identifiant unique de la séance sélectionnée
-  const [selectedScheduleId, setSelectedScheduleId] = useState(null);
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState("");
   const [movieSchedules, setMovieSchedules] = useState([]);
   const [selectedMovie, setSelectedMovie] = useState(null);
@@ -203,152 +201,6 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdminLoginDialog, setShowAdminLoginDialog] = useState(false);
   const [adminPassword, setAdminPassword] = useState("");
-
-  // Helpers pour afficher correctement les horaires pré‑remplis
-  const getPreFilledScheduleLabel = () => {
-    if (!preFillData) return "";
-
-    const scheduleFromId =
-      preFillData.scheduleId &&
-      movieSchedules.find(
-        (s) => String(s.schedule.id) === String(preFillData.scheduleId)
-      )?.schedule;
-
-    const schedule = scheduleFromId || preFillData.schedule;
-
-    if (schedule?.entry_time && schedule?.start_time) {
-      return `Entrée: ${schedule.entry_time} • Début: ${schedule.start_time}${
-        schedule.end_time ? ` • Fin: ${schedule.end_time}` : ""
-      }`;
-    }
-
-    return getTimeSlotDisplay(preFillData.timeSlot);
-  };
-
-  const getPreFilledScheduleSubLabel = () => {
-    if (!preFillData) return "";
-
-    const scheduleFromId =
-      preFillData.scheduleId &&
-      movieSchedules.find(
-        (s) => String(s.schedule.id) === String(preFillData.scheduleId)
-      )?.schedule;
-
-    const schedule = scheduleFromId || preFillData.schedule;
-
-    if (schedule?.entry_time && schedule?.start_time) {
-      return `Film à ${schedule.start_time}${schedule.end_time ? `` : ""}`;
-    }
-
-    return isHalloween
-      ? mapTimeSlotToHalloween(preFillData.timeSlot)
-      : preFillData.timeSlot;
-  };
-
-  // Retourne l'heure d'entrée exacte pour la réservation en cours
-  const getCurrentEntryTimeForBooking = () => {
-    // 1) Si on a un scheduleId sélectionné et des movieSchedules chargés,
-    // retrouver la séance correspondante (priorité la plus haute)
-    if (selectedScheduleId && movieSchedules.length > 0) {
-      const scheduleForId = movieSchedules.find(
-        (s) => String(s.schedule.id) === String(selectedScheduleId)
-      );
-      if (scheduleForId?.schedule?.entry_time) {
-        console.log(
-          "✅ entry_time trouvé via selectedScheduleId:",
-          scheduleForId.schedule.entry_time
-        );
-        return scheduleForId.schedule.entry_time;
-      }
-    }
-
-    // 2) Si on a un schedule pré-rempli avec entry_time, le retourner
-    if (preFillData?.schedule?.entry_time) {
-      console.log(
-        "✅ entry_time trouvé via preFillData:",
-        preFillData.schedule.entry_time
-      );
-      return preFillData.schedule.entry_time;
-    }
-
-    // 3) Si on a un selectedTimeSlot et des movieSchedules, chercher par time_slot
-    if (selectedTimeSlot && movieSchedules.length > 0) {
-      const scheduleForSlot = movieSchedules.find(
-        (s) => s.schedule.time_slot === selectedTimeSlot
-      );
-      if (scheduleForSlot?.schedule?.entry_time) {
-        console.log(
-          "✅ entry_time trouvé via selectedTimeSlot:",
-          scheduleForSlot.schedule.entry_time
-        );
-        return scheduleForSlot.schedule.entry_time;
-      }
-    }
-
-    // 4) Fallback : pas d'heure d'entrée spécifique trouvée
-    console.warn("⚠️ Aucun entry_time trouvé pour la réservation");
-    return null;
-  };
-
-  // Fonction pour récupérer start_time pour la réservation
-  const getCurrentStartTimeForBooking = () => {
-    // 1) Si on a un scheduleId sélectionné et des movieSchedules chargés
-    if (selectedScheduleId && movieSchedules.length > 0) {
-      const scheduleForId = movieSchedules.find(
-        (s) => String(s.schedule.id) === String(selectedScheduleId)
-      );
-      if (scheduleForId?.schedule?.start_time) {
-        return scheduleForId.schedule.start_time;
-      }
-    }
-
-    // 2) Si on a un schedule pré-rempli avec start_time
-    if (preFillData?.schedule?.start_time) {
-      return preFillData.schedule.start_time;
-    }
-
-    // 3) Si on a un selectedTimeSlot et des movieSchedules
-    if (selectedTimeSlot && movieSchedules.length > 0) {
-      const scheduleForSlot = movieSchedules.find(
-        (s) => s.schedule.time_slot === selectedTimeSlot
-      );
-      if (scheduleForSlot?.schedule?.start_time) {
-        return scheduleForSlot.schedule.start_time;
-      }
-    }
-
-    return null;
-  };
-
-  // Fonction pour récupérer end_time pour la réservation
-  const getCurrentEndTimeForBooking = () => {
-    // 1) Si on a un scheduleId sélectionné et des movieSchedules chargés
-    if (selectedScheduleId && movieSchedules.length > 0) {
-      const scheduleForId = movieSchedules.find(
-        (s) => String(s.schedule.id) === String(selectedScheduleId)
-      );
-      if (scheduleForId?.schedule?.end_time) {
-        return scheduleForId.schedule.end_time;
-      }
-    }
-
-    // 2) Si on a un schedule pré-rempli avec end_time
-    if (preFillData?.schedule?.end_time) {
-      return preFillData.schedule.end_time;
-    }
-
-    // 3) Si on a un selectedTimeSlot et des movieSchedules
-    if (selectedTimeSlot && movieSchedules.length > 0) {
-      const scheduleForSlot = movieSchedules.find(
-        (s) => s.schedule.time_slot === selectedTimeSlot
-      );
-      if (scheduleForSlot?.schedule?.end_time) {
-        return scheduleForSlot.schedule.end_time;
-      }
-    }
-
-    return null;
-  };
 
   // Debug: Log when dialog state changes
   useEffect(() => {
@@ -668,8 +520,6 @@ function App() {
     const selectedDateObj = new Date(bookingData.selectedDate);
     setSelectedDate(selectedDateObj);
     setSelectedTimeSlot(bookingData.selectedTimeSlot);
-    // Pré‑sélectionner aussi l'ID de la séance si disponible
-    setSelectedScheduleId(bookingData.schedule?.id || null);
     setSelectedMovie(bookingData.selectedMovie);
 
     // Set form data
@@ -699,7 +549,6 @@ function App() {
     setPreFillData({
       date: bookingData.selectedDate,
       timeSlot: bookingData.selectedTimeSlot,
-      scheduleId: bookingData.schedule?.id || null,
       movie: bookingData.selectedMovie,
       movieTitle: bookingData.selectedMovie.title,
       isEvent: bookingData.isEvent || false,
@@ -803,7 +652,6 @@ function App() {
       setSelectedDate(null);
       setSelectedDayOfWeek("");
       setSelectedTimeSlot("");
-      setSelectedScheduleId(null);
       setSelectedMovie(null);
       setMovieSchedules([]);
       return;
@@ -812,7 +660,6 @@ function App() {
     setSelectedDate(date);
     setSelectedDayOfWeek(getDayOfWeek(date));
     setSelectedTimeSlot(""); // Reset time slot selection
-    setSelectedScheduleId(null); // Reset schedule selection
     setSelectedMovie(null); // Reset movie selection
 
     // Show loading state
@@ -917,24 +764,15 @@ function App() {
   };
 
   // Handle time slot selection with content info (movie or event)
-  // On utilise maintenant l'ID de la séance comme valeur du Select
-  const handleTimeSlotSelect = async (scheduleId) => {
-    setSelectedScheduleId(scheduleId);
+  const handleTimeSlotSelect = async (timeSlot) => {
+    setSelectedTimeSlot(timeSlot);
 
-    // Retrouver la séance correspondante à partir de son ID
+    // Find the schedule for this time slot
     const scheduleForSlot = movieSchedules.find(
-      (schedule) => String(schedule.schedule.id) === String(scheduleId)
+      (schedule) => schedule.schedule.time_slot === timeSlot
     );
 
     if (scheduleForSlot) {
-      const timeSlot =
-        scheduleForSlot.schedule.time_slot ||
-        scheduleForSlot.schedule.custom_time ||
-        "";
-
-      // Mettre à jour le créneau horaire réel utilisé pour la réservation
-      setSelectedTimeSlot(timeSlot);
-
       // For events, the content is in scheduleForSlot.content
       // For movies, the content is in scheduleForSlot.movie
       const content = scheduleForSlot.content || scheduleForSlot.movie;
@@ -954,23 +792,17 @@ function App() {
 
           // Try to find in freshly fetched schedules
           const updatedSchedule = fetchedSchedules.find(
-            (schedule) => String(schedule.schedule.id) === String(scheduleId)
+            (schedule) => schedule.schedule.time_slot === timeSlot
           );
 
           if (updatedSchedule) {
-            const updatedTimeSlot =
-              updatedSchedule.schedule.time_slot ||
-              updatedSchedule.schedule.custom_time ||
-              "";
-            setSelectedTimeSlot(updatedTimeSlot);
-
             const content = updatedSchedule.content || updatedSchedule.movie;
             setSelectedMovie(content);
           } else {
             setSelectedMovie(null);
             // Don't show warning - backend will handle validation
             console.warn(
-              `No schedule found for schedule id ${scheduleId} on ${dateString}`
+              `No schedule found for time slot ${timeSlot} on ${dateString}`
             );
           }
         } catch (error) {
@@ -1035,10 +867,6 @@ function App() {
           : parseInt(formData.nbPersonne);
 
       // First create the booking
-      const entryTimeForBooking = getCurrentEntryTimeForBooking();
-      const startTimeForBooking = getCurrentStartTimeForBooking();
-      const endTimeForBooking = getCurrentEndTimeForBooking();
-
       const bookingData = {
         first_name: formData.firstName.trim(),
         last_name: formData.lastName.trim(),
@@ -1047,9 +875,6 @@ function App() {
         booking_date: format(selectedDate, "yyyy-MM-dd"),
         day_of_week: selectedDayOfWeek,
         time_slot: selectedTimeSlot,
-        entry_time: entryTimeForBooking,
-        start_time: startTimeForBooking,
-        end_time: endTimeForBooking,
         payment_method: formData.paymentMethod,
         promo_code: formData.promoCode
           ? formData.promoCode.trim().toUpperCase()
@@ -1265,7 +1090,6 @@ function App() {
     setCurrentStep("home");
     setSelectedDate(null);
     setSelectedTimeSlot("");
-    setSelectedScheduleId(null);
     setSelectedDayOfWeek("");
     setFormData({
       firstName: "",
@@ -2150,22 +1974,13 @@ function App() {
 
           {/* Indicateur de pré-remplissage */}
           {selectedDate &&
-            (selectedScheduleId || selectedTimeSlot) &&
+            selectedTimeSlot &&
             selectedMovie &&
             (() => {
               // Trouver le schedule correspondant pour obtenir les horaires réels
-              const scheduleForSlot =
-                // Priorité à l'ID de séance si disponible
-                (selectedScheduleId &&
-                  movieSchedules.find(
-                    (schedule) =>
-                      String(schedule.schedule.id) ===
-                      String(selectedScheduleId)
-                  )) ||
-                // Fallback sur le time_slot (ancien comportement)
-                movieSchedules.find(
-                  (schedule) => schedule.schedule.time_slot === selectedTimeSlot
-                );
+              const scheduleForSlot = movieSchedules.find(
+                (schedule) => schedule.schedule.time_slot === selectedTimeSlot
+              );
               const actualSchedule =
                 scheduleForSlot?.schedule || preFillData?.schedule;
 
@@ -2254,8 +2069,7 @@ function App() {
               <div className="space-y-2">
                 <Label className="text-white">Créneau horaire *</Label>
                 <Select
-                  // On utilise l'ID de la séance comme valeur interne
-                  value={selectedScheduleId ? String(selectedScheduleId) : ""}
+                  value={selectedTimeSlot}
                   onValueChange={handleTimeSlotSelect}
                   disabled={!selectedDate}
                 >
@@ -2284,7 +2098,7 @@ function App() {
                           return (
                             <SelectItem
                               key={schedule.schedule.id}
-                              value={String(schedule.schedule.id)}
+                              value={schedule.schedule.time_slot}
                               className={`text-white hover:bg-gray-700 ${
                                 isBookingClosed ? "opacity-50" : ""
                               }`}
@@ -2311,7 +2125,9 @@ function App() {
                                   {schedule.schedule.entry_time &&
                                   schedule.schedule.start_time
                                     ? `Film à ${schedule.schedule.start_time}${
-                                        schedule.schedule.end_time ? `` : ""
+                                        schedule.schedule.end_time
+                                          ? ``
+                                          : ""
                                       }`
                                     : isHalloween
                                     ? mapTimeSlotToHalloween(
@@ -2373,10 +2189,8 @@ function App() {
                       ) : // Show pre-filled option
                       isPreFilled && preFillData ? (
                         <SelectItem
-                          key={preFillData.scheduleId || preFillData.timeSlot}
-                          value={String(
-                            preFillData.scheduleId || preFillData.timeSlot
-                          )}
+                          key={preFillData.timeSlot}
+                          value={preFillData.timeSlot}
                           className="text-white hover:bg-gray-700"
                         >
                           <div>
@@ -2395,10 +2209,20 @@ function App() {
                             ) : (
                               <>
                                 <div className="font-medium">
-                                  {getPreFilledScheduleLabel()}
+                                  {preFillData.schedule?.entry_time &&
+                                  preFillData.schedule?.start_time
+                                    ? `Entrée: ${preFillData.schedule.entry_time} • Début: ${preFillData.schedule.start_time}`
+                                    : getTimeSlotDisplay(preFillData.timeSlot)}
                                 </div>
                                 <div className="text-sm text-gray-300">
-                                  {getPreFilledScheduleSubLabel()}
+                                  {preFillData.schedule?.entry_time &&
+                                  preFillData.schedule?.start_time
+                                    ? `Film à ${preFillData.schedule.start_time}`
+                                    : isHalloween
+                                    ? mapTimeSlotToHalloween(
+                                        preFillData.timeSlot
+                                      )
+                                    : preFillData.timeSlot}
                                 </div>
                                 <div className="text-sm text-gray-400">
                                   {preFillData.schedule?.entry_time &&

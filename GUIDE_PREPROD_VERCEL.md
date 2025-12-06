@@ -253,8 +253,3 @@ vercel logs <deployment-url>
 - Vérifiez que vous avez les droits administrateur sur le projet
 - Vérifiez que la branche `main` est bien configurée comme branche de production
 
-
-
-
-
-

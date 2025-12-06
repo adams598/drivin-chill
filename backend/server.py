@@ -89,111 +89,23 @@ def encode_mongo_url(url):
 # Encoder l'URL si nécessaire
 encoded_mongo_url = encode_mongo_url(mongo_url)
 
-# Configuration MongoDB optimisée pour la production (serverless)
-# En production, on utilise des timeouts plus courts pour éviter les timeouts de la plateforme
-# La connexion sera établie de manière lazy (à la première requête)
-is_production = os.environ.get('VERCEL') or os.environ.get('ENVIRONMENT') == 'production'
-
-# ⚠️ IMPORTANT : Pattern Singleton pour MongoDB sur Vercel
-# Sur Vercel (serverless), chaque requête peut être une nouvelle instance du module
-# Il faut garantir qu'une seule connexion MongoDB est créée et réutilisée
-_client = None
-_db = None
-
-def get_mongodb_client():
-    """
-    Singleton pour obtenir le client MongoDB - CRUCIAL pour Vercel serverless
-    Garantit qu'une seule connexion est créée et réutilisée entre les requêtes
-    """
-    global _client, _db
-    
-    # Si le client existe déjà, le réutiliser
-    if _client is not None and _db is not None:
-        return _client, _db
-    
-    # Créer une nouvelle connexion seulement si elle n'existe pas
-    if is_production:
-        # En production (Vercel/serverless), utiliser des timeouts TRÈS courts
-        # ⚠️ CRUCIAL : Timeouts courts pour éviter les timeouts de Vercel (10s max par requête)
-        server_selection_timeout = 5000  # 5 secondes (réduit pour éviter les timeouts)
-        connect_timeout = 5000  # 5 secondes
-        socket_timeout = 20000  # 20 secondes pour les opérations longues
-    else:
-        # En développement, timeouts plus longs
-        server_selection_timeout = 30000
-        connect_timeout = 30000
-        socket_timeout = 30000
-
-    # Configuration SSL/TLS pour MongoDB Atlas
-    is_atlas = 'mongodb+srv://' in mongo_url or 'mongodb.net' in mongo_url
-
-    # Paramètres de connexion MongoDB optimisés pour Vercel serverless
-    mongo_kwargs = {
-        'serverSelectionTimeoutMS': server_selection_timeout,
-        'connectTimeoutMS': connect_timeout,
-        'socketTimeoutMS': socket_timeout,
-        'maxPoolSize': 1,  # ⚠️ CRUCIAL : Pool de 1 connexion seulement (même en dev pour cohérence)
-        'minPoolSize': 0,  # Pas de connexions persistantes en serverless
-        'maxIdleTimeMS': 30000,  # Fermer les connexions inactives après 30s (réduit)
-        'retryWrites': True,  # Activer les retry writes
-        'retryReads': True,  # Activer les retry reads
-    }
-
-    # Pour MongoDB Atlas, SSL/TLS est automatique avec mongodb+srv://
-    if is_atlas:
-        url_lower = encoded_mongo_url.lower()
-        if 'tls=true' not in url_lower and 'ssl=true' not in url_lower:
-            try:
-                mongo_kwargs.update({
-                    'tls': True,
-                    'tlsAllowInvalidCertificates': False,
-                    'tlsAllowInvalidHostnames': False,
-                })
-                logging.info("   Configuration MongoDB Atlas - SSL/TLS activé")
-            except Exception:
-                try:
-                    mongo_kwargs.update({
-                        'ssl': True,
-                        'ssl_cert_reqs': 2,
-                    })
-                    logging.info("   Configuration MongoDB Atlas - SSL activé (mode legacy)")
-                except Exception:
-                    logging.warning("   Utilisation des paramètres SSL/TLS par défaut")
-
-    try:
-        # Créer le client MongoDB UNE SEULE FOIS
-        _client = AsyncIOMotorClient(encoded_mongo_url, **mongo_kwargs)
-        _db = _client[db_name]
-        logging.info(f"✅ Client MongoDB créé (singleton) : {db_name}")
-        logging.info(f"   Mode: {'Production (serverless)' if is_production else 'Développement'}")
-        logging.info(f"   Type: {'MongoDB Atlas' if is_atlas else 'MongoDB local'}")
+try:
+    # Augmenter le timeout pour MongoDB Atlas (30 secondes)
+    client = AsyncIOMotorClient(
+        encoded_mongo_url, 
+        serverSelectionTimeoutMS=30000, 
+        connectTimeoutMS=30000,
+        socketTimeoutMS=30000
+    )
+    db = client[db_name]
+    logging.info(f"✅ Connexion MongoDB configurée : {db_name}")
     logging.info(f"   URL: {mongo_url.split('@')[0] + '@***' if '@' in mongo_url else '***'}")
-        return _client, _db
 except Exception as e:
-        logging.error(f"❌ Erreur lors de la création du client MongoDB : {e}")
-        logging.error("   Vérifiez votre MONGO_URL dans les variables d'environnement")
-        if is_atlas:
-            logging.error("   Pour MongoDB Atlas, assurez-vous que :")
-            logging.error("   1. L'URL contient 'mongodb+srv://'")
-            logging.error("   2. Les adresses IP de Vercel sont autorisées (0.0.0.0/0 dans Network Access)")
-            logging.error("   3. L'utilisateur a les permissions nécessaires")
-        raise
-
-# ⚠️ IMPORTANT : Ne PAS initialiser le client au chargement du module sur Vercel
-# La connexion sera créée de manière lazy (à la première requête) via ensure_mongodb_connection()
-# Cela évite les timeouts au démarrage
-if is_production:
-    # En production, ne pas créer la connexion au chargement (lazy connection)
-    client = None
-    db = None
-    logging.info("🚀 Mode production : connexion MongoDB sera créée à la première requête")
-else:
-    # En développement, créer la connexion au chargement
-    try:
-        client, db = get_mongodb_client()
-        logging.info("✅ Connexion MongoDB initialisée au démarrage (mode développement)")
-    except Exception as e:
-        logging.error(f"❌ Impossible d'initialiser MongoDB : {e}")
+    logging.error(f"❌ Erreur lors de la configuration MongoDB : {e}")
+    logging.error("   Le serveur démarrera mais les requêtes MongoDB échoueront")
+    logging.error("   Vérifiez votre MONGO_URL dans le fichier .env")
+    logging.error("   Si votre mot de passe contient @, :, /, etc., encodez-les en URL")
+    # Créer des objets None pour éviter les erreurs, mais ils ne fonctionneront pas
     client = None
     db = None
 
@@ -598,10 +510,6 @@ class TicketBooking(BaseModel):
     booking_date: date
     day_of_week: Union[DayOfWeek, str]  # Allow string for events
     time_slot: Union[TimeSlot, str]     # Allow string for events - identifiant du créneau (21h15, 23h45)
-    # Heures effectives au moment de la réservation (dénormalisées pour l'admin et l'email)
-    entry_time: Optional[str] = None
-    start_time: Optional[str] = None  # Heure de début du film
-    end_time: Optional[str] = None    # Heure de fin du film
     payment_method: PaymentMethod
     price: float = 17.0
     final_price: Optional[float] = None  # Price after promo code discount
@@ -630,10 +538,6 @@ class TicketBookingCreate(BaseModel):
     payment_method: PaymentMethod
     promo_code: Optional[str] = None
     final_price: Optional[float] = None  # Price after promo code discount
-    # Permet au frontend d'envoyer directement les horaires exacts
-    entry_time: Optional[str] = None
-    start_time: Optional[str] = None  # Heure de début du film
-    end_time: Optional[str] = None    # Heure de fin du film
     nb_personne: int = 1
     # New fields for event booking flexibility
     content_type: Optional[str] = None  # 'movie' or 'event'
@@ -686,49 +590,6 @@ class AvailabilityCheck(BaseModel):
     time_slot: TimeSlot
 
 # Admin authentication (simple token-based)
-# ⚠️ CRUCIAL pour Vercel : Dépendance FastAPI pour garantir la connexion MongoDB
-# Cette fonction est appelée avant chaque route qui en a besoin
-# Elle garantit que le client MongoDB est connecté et réutilisé
-async def ensure_mongodb_connection():
-    """
-    Dépendance FastAPI pour garantir la connexion MongoDB - CRUCIAL pour Vercel serverless
-    Similaire à connectDB() dans l'exemple Node.js
-    Garantit qu'une seule connexion est créée et réutilisée
-    
-    ⚠️ IMPORTANT : En production, on ne fait PAS de ping pour éviter les timeouts
-    La connexion sera testée lors de la première opération MongoDB
-    """
-    global client, db
-    
-    # Si le client existe déjà, le réutiliser directement (pas de ping en production)
-    if client is not None and db is not None:
-        # En production, ne pas faire de ping (trop lent, cause des timeouts)
-        # La connexion sera testée lors de la première opération MongoDB
-        if is_production:
-            return db
-        
-        # En développement seulement, vérifier rapidement la connexion
-        try:
-            await asyncio.wait_for(client.admin.command('ping'), timeout=1.0)
-            return db
-        except Exception:
-            # Connexion perdue, réinitialiser
-            logging.warning("⚠️  Connexion MongoDB perdue, réinitialisation...")
-            client = None
-            db = None
-    
-    # Créer ou récupérer le client MongoDB (singleton)
-    # Le client sera créé mais la connexion sera établie de manière lazy (à la première opération)
-    try:
-        client, db = get_mongodb_client()
-        return db
-    except Exception as e:
-        logging.error(f"❌ Impossible de créer le client MongoDB : {e}")
-        raise HTTPException(
-            status_code=503,
-            detail="Base de données MongoDB non disponible. Veuillez réessayer dans quelques instants."
-        )
-
 async def get_admin_user(credentials = Depends(security)):
     admin_token = os.environ.get('ADMIN_TOKEN', 'admin_token_2024')  # Fallback for development
     if not credentials or credentials.credentials != admin_token:
@@ -736,74 +597,19 @@ async def get_admin_user(credentials = Depends(security)):
     return True
 
 # Helper function to check MongoDB connection
-async def check_mongodb_connection(max_retries: int = 2):
-    """Check if MongoDB is available - optimisé pour la production avec retry"""
-    global client, db
-    
-    # Si le client n'est pas initialisé, essayer de le créer
+async def check_mongodb_connection():
+    """Check if MongoDB is available"""
     if db is None or client is None:
-        try:
-            client, db = get_mongodb_client()
-        except Exception as e:
-            logging.warning(f"⚠️  MongoDB client non initialisé : {e}")
+        logging.warning("⚠️  MongoDB client non initialisé")
         return False
-    
-    # En production, utiliser un timeout plus court pour éviter les timeouts de la plateforme
-    timeout = 10.0 if is_production else 30.0
-    
-    # Retry logic pour les environnements serverless
-    for attempt in range(max_retries + 1):
-        try:
-            await asyncio.wait_for(client.admin.command('ping'), timeout=timeout)
-            if attempt > 0:
-                logging.info(f"✅ Connexion MongoDB établie après {attempt + 1} tentative(s)")
+    try:
+        await asyncio.wait_for(client.admin.command('ping'), timeout=5.0)
         return True
     except asyncio.TimeoutError:
-            if attempt < max_retries:
-                wait_time = (attempt + 1) * 0.5  # Backoff exponentiel
-                logging.warning(f"⚠️  Timeout MongoDB (tentative {attempt + 1}/{max_retries + 1}), réessai dans {wait_time}s...")
-                await asyncio.sleep(wait_time)
-                continue
-            else:
-                if is_production:
-                    logging.warning("⚠️  Timeout lors de la connexion MongoDB après tous les essais")
-                    logging.warning("   La connexion sera réessayée à la prochaine requête")
-                else:
         logging.error("❌ Timeout lors de la connexion MongoDB")
-                    logging.error("   Vérifiez que MongoDB est démarré et que MONGO_URL est correct")
         return False
     except Exception as e:
-            error_msg = str(e).lower()
-            # Erreurs SSL/TLS spécifiques
-            if 'ssl' in error_msg or 'tls' in error_msg or 'handshake' in error_msg:
-                logging.error(f"❌ Erreur SSL/TLS MongoDB : {e}")
-                logging.error("   Vérifiez que votre MONGO_URL est correcte pour MongoDB Atlas")
-                logging.error("   Assurez-vous que les adresses IP sont autorisées dans MongoDB Atlas (0.0.0.0/0)")
-                if attempt < max_retries:
-                    wait_time = (attempt + 1) * 0.5
-                    logging.warning(f"   Réessai dans {wait_time}s...")
-                    await asyncio.sleep(wait_time)
-                    continue
-                return False
-            # Autres erreurs réseau
-            elif is_production and ('network' in error_msg or 'connection' in error_msg):
-                if attempt < max_retries:
-                    wait_time = (attempt + 1) * 0.5
-                    logging.warning(f"⚠️  Connexion MongoDB non disponible (tentative {attempt + 1}/{max_retries + 1}), réessai dans {wait_time}s...")
-                    await asyncio.sleep(wait_time)
-                    continue
-                else:
-                    logging.warning(f"⚠️  Connexion MongoDB non disponible après tous les essais: {type(e).__name__}")
-                    return False
-            else:
         logging.error(f"❌ Erreur de connexion MongoDB : {e}")
-                logging.error("   Vérifiez votre MONGO_URL dans les variables d'environnement")
-                if attempt < max_retries:
-                    wait_time = (attempt + 1) * 0.5
-                    await asyncio.sleep(wait_time)
-                    continue
-                return False
-    
         return False
 
 # Helper function to get current time slot settings
@@ -1072,191 +878,53 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
             booking_promo_code = booking_db.get("promo_code") or booking.promo_code
             booking_promo_discount_info = booking_db.get("promo_discount_info")
         
-        # Utiliser la même logique que pour l'admin : récupérer les détails via get_booking_details_from_schedules
-        # Cela permet d'avoir les bonnes valeurs même pour les anciennes réservations
+        # Récupérer le schedule pour obtenir les informations du film
+        # Essayer avec la date en format ISO string
         booking_date_str = booking.booking_date.isoformat() if isinstance(booking.booking_date, date) else str(booking.booking_date)
         time_slot_str = str(booking.time_slot)
         
-        # Récupérer le schedule complet une seule fois pour avoir tous les horaires cohérents
-        # Utiliser la même logique que dans le frontend : récupérer le schedule complet
-        final_schedule = None
-        movie_title_final = None
-        
-        # 1) Si on a content_id et content_type, chercher directement (priorité absolue)
-        if booking.content_id and booking.content_type:
-            final_schedule = await db.content_schedules.find_one({
+        # Essayer plusieurs variantes de recherche
+        schedule = await db.movie_schedules.find_one({
             "date": booking_date_str,
-                "content_id": booking.content_id,
-                "content_type": booking.content_type,
+            "time_slot": time_slot_str,
             "is_active": True
-            })
-            if not final_schedule:
-                final_schedule = await db.content_schedules.find_one({
-                    "date": booking_date_str,
-                    "content_id": booking.content_id,
-                    "content_type": booking.content_type
-                })
-            
-            if final_schedule:
-                logging.info(f"📧 ✅ Schedule trouvé directement via content_id={booking.content_id}, content_type={booking.content_type}")
-                logging.info(f"📧 Schedule contenu: entry_time={final_schedule.get('entry_time')}, start_time={final_schedule.get('start_time')}, end_time={final_schedule.get('end_time')}")
-                # Récupérer immédiatement le titre du film/événement depuis le schedule trouvé
-                if final_schedule.get("content_type") == "movie" and final_schedule.get("content_id"):
-                    movie = await db.movies.find_one({"id": final_schedule.get("content_id")})
-                    if movie:
-                        movie_title_final = movie.get("title")
-                        logging.info(f"📧 ✅ Titre du film récupéré immédiatement: {movie_title_final}")
-                elif final_schedule.get("content_type") == "event" and final_schedule.get("content_id"):
-                    event = await db.events.find_one({"id": final_schedule.get("content_id")})
-                    if event:
-                        movie_title_final = event.get("title")
-                        logging.info(f"📧 ✅ Titre de l'événement récupéré immédiatement: {movie_title_final}")
-                elif final_schedule.get("movie_id"):
-                    movie = await db.movies.find_one({"id": final_schedule.get("movie_id")})
-                    if movie:
-                        movie_title_final = movie.get("title")
-                        logging.info(f"📧 ✅ Titre du film récupéré immédiatement (legacy): {movie_title_final}")
+        })
         
-        # 2) Si pas trouvé, récupérer movie_title d'abord pour chercher précisément
-        if not final_schedule:
-            booking_details = await get_booking_details_from_schedules(
-                booking.booking_date,
-                booking.time_slot,
-                booking.content_id,
-                booking.content_type
-            )
-            movie_title_final = booking_details.get("movie_title")
-            
-            # Si on a movie_title, chercher tous les schedules et trouver celui qui correspond
-            if movie_title_final:
-                # Chercher dans content_schedules
-                all_schedules = await db.content_schedules.find({
-                    "date": booking_date_str,
-                    "time_slot": time_slot_str,
-                    "is_active": True
-                }).to_list(100)
-                
-                if not all_schedules:
-                    all_schedules = await db.content_schedules.find({
-                        "date": booking_date_str,
-                        "time_slot": time_slot_str
-                    }).to_list(100)
-                
-                # Trouver le schedule qui correspond au movie_title
-                for schedule in all_schedules:
-                    schedule_content_id = schedule.get("content_id")
-                    schedule_content_type = schedule.get("content_type", "movie")
-                    
-                    if schedule_content_type == "movie" and schedule_content_id:
-                        movie = await db.movies.find_one({"id": schedule_content_id})
-                        if movie and movie.get("title") == movie_title_final:
-                            final_schedule = schedule
-                            logging.info(f"📧 content_schedule trouvé via movie_title '{movie_title_final}'")
-                            break
-                    elif schedule_content_type == "event" and schedule_content_id:
-                        event = await db.events.find_one({"id": schedule_content_id})
-                        if event and event.get("title") == movie_title_final:
-                            final_schedule = schedule
-                            logging.info(f"📧 content_schedule trouvé via movie_title '{movie_title_final}'")
-                            break
-                
-                # Si pas trouvé dans content_schedules, chercher dans movie_schedules legacy
-                if not final_schedule:
-                    all_movie_schedules = await db.movie_schedules.find({
-                        "date": booking_date_str,
-                        "time_slot": time_slot_str,
-                        "is_active": True
-                    }).to_list(100)
-                    
-                    if not all_movie_schedules:
-                        all_movie_schedules = await db.movie_schedules.find({
-                            "date": booking_date_str,
-                            "time_slot": time_slot_str
-                        }).to_list(100)
-                    
-                    # Pour chaque schedule, vérifier si le titre correspond
-                    for sched in all_movie_schedules:
-                        movie_id = sched.get("movie_id")
-                        if movie_id:
-                            movie = await db.movies.find_one({"id": movie_id})
-                            if movie and movie.get("title") == movie_title_final:
-                                final_schedule = sched
-                                logging.info(f"📧 movie_schedule trouvé via movie_title '{movie_title_final}'")
-                                break
-        
-        # 3) Si toujours pas trouvé, chercher par time_slot seul (fallback)
-        if not final_schedule:
-            final_schedule = await db.content_schedules.find_one({
-                "date": booking_date_str,
-                "time_slot": time_slot_str,
+        # Si pas trouvé, essayer avec le format date object
+        if not schedule:
+            schedule = await db.movie_schedules.find_one({
+                "date": booking.booking_date,
+                "time_slot": booking.time_slot,
                 "is_active": True
             })
-            if not final_schedule:
-                final_schedule = await db.content_schedules.find_one({
-                    "date": booking_date_str,
-                    "time_slot": time_slot_str
-                })
-            
-            # Si toujours pas trouvé, chercher dans movie_schedules legacy
-            if not final_schedule:
-                final_schedule = await db.movie_schedules.find_one({
+        
+        # Si toujours pas trouvé, essayer avec time_slot en valeur brute
+        if not schedule:
+            schedule = await db.movie_schedules.find_one({
                 "date": booking_date_str,
-                    "time_slot": time_slot_str,
+                "time_slot": {"$in": [time_slot_str, booking.time_slot, str(booking.time_slot).lower(), str(booking.time_slot).upper()]},
                 "is_active": True
-                })
-                if not final_schedule:
-                    final_schedule = await db.movie_schedules.find_one({
-                        "date": booking_date_str,
-                        "time_slot": time_slot_str
-                    })
+            })
         
-        # 4) Récupérer tous les horaires depuis le même schedule (comme dans le frontend)
-        # Priorité aux valeurs stockées dans la réservation (dénormalisées)
-        schedule_found = False
-        if final_schedule:
-            schedule_found = True
-            # Utiliser les valeurs stockées dans la réservation si disponibles, sinon depuis le schedule
-            entry_time = booking.entry_time or final_schedule.get("entry_time")
-            start_time = booking.start_time or final_schedule.get("start_time")
-            end_time = booking.end_time or final_schedule.get("end_time")
-            
-            # Récupérer aussi movie_title depuis le schedule si pas déjà fait
-            if not movie_title_final:
-                if final_schedule.get("content_type") == "movie" and final_schedule.get("content_id"):
-                    movie = await db.movies.find_one({"id": final_schedule.get("content_id")})
-                    if movie:
-                        movie_title_final = movie.get("title")
-                elif final_schedule.get("content_type") == "event" and final_schedule.get("content_id"):
-                    event = await db.events.find_one({"id": final_schedule.get("content_id")})
-                    if event:
-                        movie_title_final = event.get("title")
-                elif final_schedule.get("movie_id"):
-                    movie = await db.movies.find_one({"id": final_schedule.get("movie_id")})
-                    if movie:
-                        movie_title_final = movie.get("title")
-            
-            logging.info(f"📧 Horaires depuis schedule complet: entry={entry_time}, start={start_time}, end={end_time}, movie={movie_title_final}")
-            logging.info(f"📧 Schedule trouvé - contenu brut: entry_time={final_schedule.get('entry_time')}, start_time={final_schedule.get('start_time')}, end_time={final_schedule.get('end_time')}, content_id={final_schedule.get('content_id')}, movie_id={final_schedule.get('movie_id')}")
-            
-            # Si le schedule a été trouvé mais n'a pas start_time/end_time, c'est un problème dans la base de données
-            # On NE DOIT PAS utiliser le fallback car cela écraserait les valeurs correctes du schedule
-            # On garde les valeurs None du schedule plutôt que d'utiliser les valeurs par défaut du fallback
-            if not start_time or not end_time:
-                logging.error(f"📧 ❌ ERREUR: Schedule trouvé mais start_time ou end_time manquants dans la base de données!")
-                logging.error(f"📧 ❌ start_time={start_time}, end_time={end_time}")
-                logging.error(f"📧 ❌ Le schedule (content_id={final_schedule.get('content_id')}, date={booking_date_str}) devrait avoir ces champs remplis.")
-                logging.error(f"📧 ❌ Les valeurs None seront utilisées dans l'email (pas de fallback pour éviter d'écraser les valeurs correctes).")
-        else:
-            logging.warning(f"📧 ⚠️ Aucun schedule trouvé pour booking {booking.id} - date={booking_date_str}, time_slot={time_slot_str}, content_id={booking.content_id}")
+        logging.info(f"📧 Schedule trouvé: {schedule is not None}, date: {booking_date_str}, time_slot: {time_slot_str}")
         
-        movie_title = movie_title_final or movie_title
+        if schedule:
+            # Récupérer les heures depuis le schedule
+            entry_time = schedule.get("entry_time")
+            start_time = schedule.get("start_time")
+            end_time = schedule.get("end_time")
+            
+            logging.info(f"📧 Horaires depuis schedule: entry={entry_time}, start={start_time}, end={end_time}")
+            
+            # Récupérer le film
+            movie = await db.movies.find_one({"id": schedule.get("movie_id")})
+            if movie:
+                movie_title = movie.get("title", "Film à confirmer")
+                logging.info(f"📧 Film trouvé: {movie_title}")
         
-        # Utiliser TimeSlotSettings comme fallback UNIQUEMENT si aucun schedule n'a été trouvé
-        # Si un schedule est trouvé mais n'a pas start_time/end_time, on NE DOIT PAS utiliser le fallback
-        # car cela écraserait les valeurs correctes. On doit utiliser les valeurs du schedule même si elles sont None.
-        # Le fallback ne doit être utilisé que si vraiment aucun schedule n'est trouvé.
-        if not schedule_found:
-            logging.info(f"📧 Horaires manquants (aucun schedule trouvé), utilisation de TimeSlotSettings comme fallback")
+        # Si les horaires ne sont pas dans le schedule, utiliser TimeSlotSettings comme fallback
+        if not entry_time or not start_time or not end_time:
+            logging.info(f"📧 Horaires manquants dans schedule, utilisation de TimeSlotSettings comme fallback")
             try:
                 time_settings = await get_time_slot_settings()
                 time_slot_str = str(booking.time_slot).lower()
@@ -1308,13 +976,6 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
                 logging.info(f"📧 Horaires depuis TimeSlotSettings: entry={entry_time}, start={start_time}, end={end_time}")
             except Exception as e:
                 logging.warning(f"⚠️ Erreur lors de la récupération des TimeSlotSettings: {str(e)}")
-        elif schedule_found and (not start_time or not end_time):
-            # Si un schedule est trouvé mais n'a pas start_time/end_time, on ne doit PAS utiliser le fallback
-            # car cela écraserait les valeurs correctes. On garde les valeurs None ou vides du schedule.
-            logging.warning(f"📧 ⚠️ Schedule trouvé mais start_time ou end_time manquants dans la base de données")
-            logging.warning(f"📧 ⚠️ start_time={start_time}, end_time={end_time}")
-            logging.warning(f"📧 ⚠️ Le schedule devrait avoir ces champs remplis. Les valeurs None seront affichées dans l'email.")
-            # Ne pas utiliser le fallback - garder les valeurs du schedule (même si None)
         
         # Récupérer les informations du code promo si applicable
         if booking_promo_code:
@@ -1334,18 +995,12 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
                         promo_value = promo_code_doc.get("value", 0)
                         discount_amount = (booking.price * promo_value) / 100
                     
-                    # Calculer le prix final : prix initial - réduction (ne peut pas être négatif)
-                    calculated_final_price = max(0, booking.price - discount_amount)
-                    # Utiliser booking_final_price si disponible et différent, sinon utiliser le calcul
-                    final_price_to_use = booking_final_price if booking_final_price is not None and booking_final_price != booking.price else calculated_final_price
-                    
                     promo_info = {
                         "code": booking_promo_code,
                         "type": "reduction",
                         "discount_amount": round(discount_amount, 2),
-                        "final_price": round(final_price_to_use, 2)
+                        "final_price": round(booking_final_price, 2)
                     }
-                    logging.info(f"📧 Code promo calculé: discount={discount_amount}, prix initial={booking.price}, prix final={final_price_to_use}")
                 elif promo_type == "free_benefit":
                     benefit_desc = promo_code_doc.get("benefit_description", "")
                     promo_info = {
@@ -1442,7 +1097,7 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
                     <h3>📋 Détails de votre réservation</h3>
                     <p><strong>ID de réservation :</strong> {booking.id}</p>
                     <p><strong>Date :</strong> {booking.booking_date}</p>
-                    <p><strong>Créneau :</strong> {entry_time_formatted}</p>
+                    <p><strong>Créneau :</strong> {booking.time_slot}</p>
                     <p><strong>Film :</strong> {movie_title}</p>
                     <hr style="border: none; border-top: 1px solid #ddd; margin: 15px 0;">
                     <h4 style="margin: 15px 0 10px 0; color: #667eea;">⏰ Horaires</h4>
@@ -1564,10 +1219,7 @@ async def root():
     return {"message": "Bienvenue sur la billetterie Drivin And Chill"}
 
 @api_router.post("/bookings", response_model=TicketBooking)
-async def create_booking(
-    booking_data: TicketBookingCreate,
-    db = Depends(ensure_mongodb_connection)
-):
+async def create_booking(booking_data: TicketBookingCreate):
     try:
         # Initialize content_schedule
         content_schedule = None
@@ -1799,50 +1451,13 @@ async def create_booking(
             logging.info(f"Exception 24h pour réservation gratuite: {booking_data.first_name} {booking_data.last_name} - Prix final: {final_price}€")
         
         # Create booking object
-        # Note: movie_title n'est PAS sauvegardé dans bookings (toujours via jointures),
-        # mais on stocke désormais entry_time pour refléter exactement l'heure d'entrée
-        # utilisée au moment de la réservation (utile côté admin).
+        # Note: entry_time et movie_title ne sont PAS sauvegardés dans bookings
+        # Ils sont récupérés via jointures avec movie_schedules/content_schedules et movies
+        # Jointure: bookings (booking_date, time_slot) -> movie_schedules/content_schedules -> movies
         booking_dict = booking_data.dict()
         booking_dict["final_price"] = final_price
         if promo_discount_info:
             booking_dict["promo_discount_info"] = promo_discount_info
-        
-        # S'assurer que entry_time, start_time et end_time sont renseignés :
-        # 1) Priorité aux valeurs explicites envoyées par le frontend
-        # 2) Sinon, essayer de les récupérer depuis content_schedule / movie_schedule
-        # 3) Sinon, valeurs par défaut basées sur time_slot via get_booking_details_from_schedules
-        if not booking_dict.get("entry_time") or not booking_dict.get("start_time") or not booking_dict.get("end_time"):
-            derived_times = {}
-            try:
-                # Essayer de dériver via les programmations existantes
-                booking_details = await get_booking_details_from_schedules(
-                    booking_data.booking_date,
-                    booking_data.time_slot,
-                    content_id=booking_dict.get("content_id"),
-                    content_type=booking_dict.get("content_type"),
-                )
-                derived_times["entry_time"] = booking_details.get("entry_time")
-                
-                # Récupérer aussi start_time et end_time depuis le schedule trouvé
-                if content_schedule:
-                    derived_times["start_time"] = content_schedule.get("start_time")
-                    derived_times["end_time"] = content_schedule.get("end_time")
-                elif movie_schedule:
-                    derived_times["start_time"] = movie_schedule.get("start_time")
-                    derived_times["end_time"] = movie_schedule.get("end_time")
-            except Exception as e:
-                logging.warning(
-                    "⚠️ Impossible de dériver les horaires lors de la création de réservation: %s",
-                    str(e),
-                )
-
-            # Utiliser les valeurs dérivées si elles sont disponibles et que les valeurs du frontend ne le sont pas
-            if derived_times.get("entry_time") and not booking_dict.get("entry_time"):
-                booking_dict["entry_time"] = derived_times["entry_time"]
-            if derived_times.get("start_time") and not booking_dict.get("start_time"):
-                booking_dict["start_time"] = derived_times["start_time"]
-            if derived_times.get("end_time") and not booking_dict.get("end_time"):
-                booking_dict["end_time"] = derived_times["end_time"]
         
         # Sauvegarder content_id et content_type si disponibles depuis le schedule trouvé
         if content_schedule:
@@ -1936,10 +1551,7 @@ async def update_booking(booking_id: str, update_data: TicketBookingUpdate, admi
         raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour: {str(e)}")
 
 @api_router.post("/bookings/{booking_id}/cancel")
-async def cancel_booking(
-    booking_id: str,
-    db = Depends(ensure_mongodb_connection)
-):
+async def cancel_booking(booking_id: str):
     try:
         result = await db.bookings.update_one(
             {"id": booking_id},
@@ -1954,11 +1566,7 @@ async def cancel_booking(
         raise HTTPException(status_code=500, detail=f"Erreur lors de l'annulation: {str(e)}")
 
 @api_router.get("/availability")
-async def check_availability(
-    booking_date: str, 
-    time_slot: TimeSlot,
-    db = Depends(ensure_mongodb_connection)
-):
+async def check_availability(booking_date: str, time_slot: TimeSlot):
     try:
         # Parse date
         check_date = datetime.fromisoformat(booking_date).date()
@@ -2053,10 +1661,7 @@ async def check_availability(
 
 # Payment endpoints
 @api_router.post("/payments/create-checkout")
-async def create_payment_checkout(
-    request: PaymentRequest,
-    db = Depends(ensure_mongodb_connection)
-):
+async def create_payment_checkout(request: PaymentRequest):
     try:
         # Get booking details
         booking = await db.bookings.find_one({"id": request.booking_id})
@@ -2209,10 +1814,7 @@ async def create_payment_checkout(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la création du paiement: {str(e)}")
 
 @api_router.get("/payments/status/{session_id}")
-async def get_payment_status(
-    session_id: str,
-    db = Depends(ensure_mongodb_connection)
-):
+async def get_payment_status(session_id: str):
     try:
         if not stripe_api_key:
             raise HTTPException(status_code=500, detail="Configuration de paiement manquante")
@@ -2277,10 +1879,7 @@ async def get_payment_status(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la vérification du paiement: {str(e)}")
 
 @api_router.post("/webhook/stripe")
-async def stripe_webhook(
-    request: Request,
-    db = Depends(ensure_mongodb_connection)
-):
+async def stripe_webhook(request: Request):
     try:
         if not stripe_api_key:
             raise HTTPException(status_code=500, detail="Configuration de paiement manquante")
@@ -2364,11 +1963,7 @@ async def stripe_webhook(
 
 # Event management endpoints
 @api_router.post("/events", response_model=Event)
-async def create_event(
-    event_data: EventCreate, 
-    admin = Depends(get_admin_user),
-    db = Depends(ensure_mongodb_connection)
-):
+async def create_event(event_data: EventCreate, admin = Depends(get_admin_user)):
     try:
         event_obj = Event(**event_data.dict())
         event_mongo = prepare_for_mongo(event_obj.dict())
@@ -2380,10 +1975,7 @@ async def create_event(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la création de l'événement: {str(e)}")
 
 @api_router.get("/events", response_model=List[Event])
-async def get_events(
-    active_only: bool = True,
-    db = Depends(ensure_mongodb_connection)
-):
+async def get_events(active_only: bool = True):
     try:
         filter_query = {"is_active": True} if active_only else {}
         events = await db.events.find(filter_query).to_list(1000)
@@ -2392,10 +1984,7 @@ async def get_events(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des événements: {str(e)}")
 
 @api_router.get("/events/{event_id}", response_model=Event)
-async def get_event(
-    event_id: str,
-    db = Depends(ensure_mongodb_connection)
-):
+async def get_event(event_id: str):
     try:
         event = await db.events.find_one({"id": event_id})
         if not event:
@@ -2407,12 +1996,7 @@ async def get_event(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération de l'événement: {str(e)}")
 
 @api_router.put("/events/{event_id}", response_model=Event)
-async def update_event(
-    event_id: str, 
-    update_data: EventUpdate, 
-    admin = Depends(get_admin_user),
-    db = Depends(ensure_mongodb_connection)
-):
+async def update_event(event_id: str, update_data: EventUpdate, admin = Depends(get_admin_user)):
     try:
         update_dict = {k: v for k, v in update_data.dict().items() if v is not None}
         if not update_dict:
@@ -2438,11 +2022,7 @@ async def update_event(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour: {str(e)}")
 
 @api_router.delete("/events/{event_id}")
-async def delete_event(
-    event_id: str, 
-    admin = Depends(get_admin_user),
-    db = Depends(ensure_mongodb_connection)
-):
+async def delete_event(event_id: str, admin = Depends(get_admin_user)):
     try:
         # Soft delete - just mark as inactive
         result = await db.events.update_one(
@@ -2462,10 +2042,7 @@ async def delete_event(
 
 # Promo code management endpoints
 @api_router.get("/admin/promo-codes", response_model=List[PromoCode])
-async def get_promo_codes(
-    admin = Depends(get_admin_user),
-    db = Depends(ensure_mongodb_connection)
-):
+async def get_promo_codes(admin = Depends(get_admin_user)):
     try:
         codes = await db.promo_codes.find({"is_active": True}).to_list(1000)
         return [PromoCode(**parse_from_mongo(code)) for code in codes]
@@ -2473,11 +2050,7 @@ async def get_promo_codes(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des codes promo: {str(e)}")
 
 @api_router.post("/admin/promo-codes", response_model=PromoCode)
-async def create_promo_code(
-    promo_data: PromoCodeCreate, 
-    admin = Depends(get_admin_user),
-    db = Depends(ensure_mongodb_connection)
-):
+async def create_promo_code(promo_data: PromoCodeCreate, admin = Depends(get_admin_user)):
     try:
         # Check if code already exists
         existing_code = await db.promo_codes.find_one({"code": promo_data.code, "is_active": True})
@@ -2513,12 +2086,7 @@ async def create_promo_code(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la création: {str(e)}")
 
 @api_router.put("/admin/promo-codes/{code_id}", response_model=PromoCode)
-async def update_promo_code(
-    code_id: str, 
-    promo_data: PromoCodeUpdate, 
-    admin = Depends(get_admin_user),
-    db = Depends(ensure_mongodb_connection)
-):
+async def update_promo_code(code_id: str, promo_data: PromoCodeUpdate, admin = Depends(get_admin_user)):
     try:
         # Check if promo code exists
         existing_code = await db.promo_codes.find_one({"id": code_id, "is_active": True})
@@ -2548,11 +2116,7 @@ async def update_promo_code(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour: {str(e)}")
 
 @api_router.delete("/admin/promo-codes/{code_id}")
-async def delete_promo_code(
-    code_id: str, 
-    admin = Depends(get_admin_user),
-    db = Depends(ensure_mongodb_connection)
-):
+async def delete_promo_code(code_id: str, admin = Depends(get_admin_user)):
     try:
         # Soft delete - just mark as inactive
         result = await db.promo_codes.update_one(
@@ -2571,10 +2135,7 @@ async def delete_promo_code(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la suppression: {str(e)}")
 
 @api_router.post("/validate-promo-code", response_model=PromoCodeResponse)
-async def validate_promo_code(
-    validation_data: PromoCodeValidation,
-    db = Depends(ensure_mongodb_connection)
-):
+async def validate_promo_code(validation_data: PromoCodeValidation):
     try:
         # Find the promo code
         promo_code = await db.promo_codes.find_one({
@@ -2638,12 +2199,13 @@ async def validate_promo_code(
 
 # Movie management endpoints
 @api_router.post("/movies", response_model=Movie)
-async def create_movie(
-    movie_data: MovieCreate, 
-    admin = Depends(get_admin_user),
-    db = Depends(ensure_mongodb_connection)
-):
-    # db est directement retourné par ensure_mongodb_connection()
+async def create_movie(movie_data: MovieCreate, admin = Depends(get_admin_user)):
+    # Vérifier la connexion MongoDB
+    if not await check_mongodb_connection():
+        raise HTTPException(
+            status_code=503,
+            detail="Base de données MongoDB non disponible. Vérifiez votre connexion et votre fichier .env"
+        )
     
     try:
         movie_obj = Movie(**movie_data.dict())
@@ -2658,11 +2220,11 @@ async def create_movie(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la création du film: {str(e)}")
 
 @api_router.get("/movies", response_model=List[Movie])
-async def get_movies(
-    active_only: bool = True,
-    db = Depends(ensure_mongodb_connection)
-):
-    # db est directement retourné par ensure_mongodb_connection()
+async def get_movies(active_only: bool = True):
+    # Vérifier la connexion MongoDB
+    if not await check_mongodb_connection():
+        logging.warning("⚠️  MongoDB non disponible - retour d'une liste vide pour les films")
+        return []
     
     try:
         filter_query = {"is_active": True} if active_only else {}
@@ -2673,10 +2235,7 @@ async def get_movies(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des films: {str(e)}")
 
 @api_router.get("/movies/{movie_id}", response_model=Movie)
-async def get_movie(
-    movie_id: str,
-    db = Depends(ensure_mongodb_connection)
-):
+async def get_movie(movie_id: str):
     try:
         movie = await db.movies.find_one({"id": movie_id})
         if not movie:
@@ -2688,12 +2247,7 @@ async def get_movie(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération du film: {str(e)}")
 
 @api_router.put("/movies/{movie_id}", response_model=Movie)
-async def update_movie(
-    movie_id: str, 
-    update_data: MovieUpdate, 
-    admin = Depends(get_admin_user),
-    db = Depends(ensure_mongodb_connection)
-):
+async def update_movie(movie_id: str, update_data: MovieUpdate, admin = Depends(get_admin_user)):
     try:
         update_dict = {k: v for k, v in update_data.dict().items() if v is not None}
         if not update_dict:
@@ -2719,11 +2273,7 @@ async def update_movie(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour: {str(e)}")
 
 @api_router.delete("/movies/{movie_id}")
-async def delete_movie(
-    movie_id: str, 
-    admin = Depends(get_admin_user),
-    db = Depends(ensure_mongodb_connection)
-):
+async def delete_movie(movie_id: str, admin = Depends(get_admin_user)):
     try:
         # Soft delete - just mark as inactive
         result = await db.movies.update_one(
@@ -2743,11 +2293,14 @@ async def delete_movie(
 
 # Content schedule endpoints (movies and events)
 @api_router.post("/content-schedules", response_model=ContentSchedule)
-async def create_content_schedule(
-    schedule_data: ContentScheduleCreate, 
-    admin = Depends(get_admin_user),
-    db = Depends(ensure_mongodb_connection)
-):
+async def create_content_schedule(schedule_data: ContentScheduleCreate, admin = Depends(get_admin_user)):
+    # Vérifier la connexion MongoDB
+    if not await check_mongodb_connection():
+        raise HTTPException(
+            status_code=503,
+            detail="Base de données MongoDB non disponible. Vérifiez votre connexion et votre fichier .env"
+        )
+    
     try:
         # Check if content exists (movie or event)
         if schedule_data.content_type == "movie":
@@ -2804,11 +2357,7 @@ async def create_content_schedule(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la programmation: {str(e)}")
 
 @api_router.get("/content-schedules", response_model=List[ContentScheduleWithDetails])
-async def get_content_schedules(
-    date_from: Optional[str] = None, 
-    date_to: Optional[str] = None,
-    db = Depends(ensure_mongodb_connection)
-):
+async def get_content_schedules(date_from: Optional[str] = None, date_to: Optional[str] = None):
     try:
         # Build filter query
         filter_query = {"is_active": True}
@@ -2872,11 +2421,7 @@ async def get_content_schedules(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération de la programmation: {str(e)}")
 
 @api_router.delete("/content-schedules/{schedule_id}")
-async def delete_content_schedule(
-    schedule_id: str, 
-    admin = Depends(get_admin_user),
-    db = Depends(ensure_mongodb_connection)
-):
+async def delete_content_schedule(schedule_id: str, admin = Depends(get_admin_user)):
     try:
         result = await db.content_schedules.update_one(
             {"id": schedule_id},
@@ -2891,6 +2436,8 @@ async def delete_content_schedule(
     except HTTPException:
         raise
     except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la suppression: {str(e)}")
+
         raise HTTPException(status_code=500, detail=f"Erreur lors de la suppression: {str(e)}")
 
 @api_router.get("/weekly-schedule", response_model=List[ContentScheduleWithDetails])
@@ -3328,10 +2875,7 @@ async def test_email_sending(
 
 # Movie suggestions endpoints
 @api_router.post("/movie-suggestions", response_model=MovieSuggestion)
-async def create_movie_suggestion(
-    suggestion_data: MovieSuggestionCreate,
-    db = Depends(ensure_mongodb_connection)
-):
+async def create_movie_suggestion(suggestion_data: MovieSuggestionCreate):
     """Create a new movie suggestion from a spectator"""
     try:
         suggestion = MovieSuggestion(**suggestion_data.dict())
@@ -3347,11 +2891,7 @@ async def create_movie_suggestion(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la création de la suggestion: {str(e)}")
 
 @api_router.get("/admin/movie-suggestions", response_model=List[MovieSuggestion])
-async def get_movie_suggestions(
-    admin = Depends(get_admin_user), 
-    status: Optional[str] = None,
-    db = Depends(ensure_mongodb_connection)
-):
+async def get_movie_suggestions(admin = Depends(get_admin_user), status: Optional[str] = None):
     """Get all movie suggestions (admin only)"""
     try:
         filter_query = {}
@@ -3366,12 +2906,7 @@ async def get_movie_suggestions(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des suggestions: {str(e)}")
 
 @api_router.put("/admin/movie-suggestions/{suggestion_id}", response_model=MovieSuggestion)
-async def update_movie_suggestion(
-    suggestion_id: str, 
-    update_data: MovieSuggestionUpdate, 
-    admin = Depends(get_admin_user),
-    db = Depends(ensure_mongodb_connection)
-):
+async def update_movie_suggestion(suggestion_id: str, update_data: MovieSuggestionUpdate, admin = Depends(get_admin_user)):
     """Update a movie suggestion status or add admin notes"""
     try:
         # Build update data
@@ -3400,11 +2935,7 @@ async def update_movie_suggestion(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour: {str(e)}")
 
 @api_router.delete("/admin/movie-suggestions/{suggestion_id}")
-async def delete_movie_suggestion(
-    suggestion_id: str, 
-    admin = Depends(get_admin_user),
-    db = Depends(ensure_mongodb_connection)
-):
+async def delete_movie_suggestion(suggestion_id: str, admin = Depends(get_admin_user)):
     """Delete a movie suggestion"""
     try:
         result = await db.movie_suggestions.delete_one({"id": suggestion_id})
@@ -3449,11 +2980,7 @@ def times_overlap(start1: Optional[int], end1: Optional[int], start2: Optional[i
     return not (end1 <= start2 or end2 <= start1)
 
 @api_router.post("/movie-schedules", response_model=MovieSchedule)
-async def create_movie_schedule(
-    schedule_data: MovieScheduleCreate, 
-    admin = Depends(get_admin_user),
-    db = Depends(ensure_mongodb_connection)
-):
+async def create_movie_schedule(schedule_data: MovieScheduleCreate, admin = Depends(get_admin_user)):
     try:
         # Check if movie exists
         movie = await db.movies.find_one({"id": schedule_data.movie_id, "is_active": True})
@@ -3502,7 +3029,7 @@ async def create_movie_schedule(
                 if existing_content.get("time_slot") == schedule_data.time_slot:
                     raise HTTPException(
                         status_code=400,
-                        detail="Un contenu est déjà programmé à ce créneau horaire !"
+                        detail="Un contenu est déjà programmé à ce créneau horaire"
                     )
         else:
             # Si pas d'horaires personnalisés, vérifier comme avant (même time_slot = conflit)
@@ -3533,11 +3060,7 @@ async def create_movie_schedule(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la programmation: {str(e)}")
 
 @api_router.get("/movie-schedules", response_model=List[MovieScheduleWithMovie])
-async def get_movie_schedules(
-    date_from: Optional[str] = None, 
-    date_to: Optional[str] = None,
-    db = Depends(ensure_mongodb_connection)
-):
+async def get_movie_schedules(date_from: Optional[str] = None, date_to: Optional[str] = None):
     try:
         # Build filter query
         filter_query = {"is_active": True}
@@ -3594,12 +3117,7 @@ async def get_schedules_by_date(schedule_date: str):
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération: {str(e)}")
 
 @api_router.put("/movie-schedules/{schedule_id}", response_model=MovieSchedule)
-async def update_movie_schedule(
-    schedule_id: str, 
-    update_data: MovieScheduleUpdate, 
-    admin = Depends(get_admin_user),
-    db = Depends(ensure_mongodb_connection)
-):
+async def update_movie_schedule(schedule_id: str, update_data: MovieScheduleUpdate, admin = Depends(get_admin_user)):
     try:
         # Vérifier que la programmation existe
         existing_schedule = await db.movie_schedules.find_one({"id": schedule_id, "is_active": True})
@@ -3716,11 +3234,7 @@ async def update_movie_schedule(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour: {str(e)}")
 
 @api_router.delete("/movie-schedules/{schedule_id}")
-async def delete_movie_schedule(
-    schedule_id: str, 
-    admin = Depends(get_admin_user),
-    db = Depends(ensure_mongodb_connection)
-):
+async def delete_movie_schedule(schedule_id: str, admin = Depends(get_admin_user)):
     try:
         result = await db.movie_schedules.update_one(
             {"id": schedule_id},
@@ -3739,11 +3253,7 @@ async def delete_movie_schedule(
 
 # QR Code scanning endpoints
 @api_router.post("/scan-qr/{booking_id}")
-async def scan_qr_code(
-    booking_id: str, 
-    admin = Depends(get_admin_user),
-    db = Depends(ensure_mongodb_connection)
-):
+async def scan_qr_code(booking_id: str, admin = Depends(get_admin_user)):
     try:
         # Find the booking
         booking = await db.bookings.find_one({"id": booking_id})
@@ -3799,10 +3309,7 @@ async def scan_qr_code(
         raise HTTPException(status_code=500, detail=f"Erreur lors du scan: {str(e)}")
 
 @api_router.get("/validate-qr/{booking_id}")
-async def validate_qr_code(
-    booking_id: str,
-    db = Depends(ensure_mongodb_connection)
-):
+async def validate_qr_code(booking_id: str):
     """Endpoint public pour vérifier la validité d'un QR code (sans admin)"""
     try:
         booking = await db.bookings.find_one({"id": booking_id})
@@ -4197,8 +3704,7 @@ async def get_booking_details_from_schedules(
     booking_date: date, 
     time_slot: Union[TimeSlot, str],
     content_id: Optional[str] = None,
-    content_type: Optional[str] = None,
-    movie_title: Optional[str] = None
+    content_type: Optional[str] = None
 ) -> dict:
     """
     Récupère entry_time et movie_title depuis les tables liées via jointures
@@ -4208,20 +3714,33 @@ async def get_booking_details_from_schedules(
     
     Si content_id et content_type sont fournis, les utilise directement pour récupérer le titre
     """
-    booking_date_str = booking_date.isoformat() if isinstance(booking_date, date) else str(booking_date)
+    # Convertir booking_date en string dans différents formats possibles
+    if isinstance(booking_date, date):
+        booking_date_str = booking_date.isoformat()
+    elif isinstance(booking_date, datetime):
+        booking_date_str = booking_date.date().isoformat()
+    else:
+        booking_date_str = str(booking_date)
+        # Essayer de parser si c'est une string
+        try:
+            if 'T' in booking_date_str:
+                booking_date_str = datetime.fromisoformat(booking_date_str).date().isoformat()
+            else:
+                booking_date_str = date.fromisoformat(booking_date_str).isoformat()
+        except:
+            pass
+    
     time_slot_str = time_slot.value if isinstance(time_slot, TimeSlot) else str(time_slot)
     normalized_time_slot_obj = normalize_time_slot_value(time_slot_str, allow_unknown=True) if time_slot_str else None
     # Convertir en string pour la recherche MongoDB
     normalized_time_slot = normalized_time_slot_obj.value if isinstance(normalized_time_slot_obj, TimeSlot) else (normalized_time_slot_obj if normalized_time_slot_obj else time_slot_str)
     
-    logging.info(f"🔍 Recherche détails pour booking_date={booking_date_str}, time_slot={time_slot_str}, normalized={normalized_time_slot}, content_id={content_id}, content_type={content_type}")
+    logging.info(f"🔍 Recherche détails pour booking_date={booking_date_str} (type: {type(booking_date)}), time_slot={time_slot_str}, normalized={normalized_time_slot}, content_id={content_id}, content_type={content_type}")
     
     entry_time = None
-    movie_title_result = None  # Variable locale pour éviter conflit avec le paramètre
-    content_schedule = None  # Initialiser content_schedule
+    movie_title = None
     
-    # Si content_id et content_type sont disponibles, utiliser directement pour récupérer
-    # le titre ET tenter une jointure plus précise avec content_schedules
+    # Si content_id et content_type sont disponibles, utiliser directement pour récupérer le titre
     if content_id and content_type:
         if content_type == "movie":
             # Chercher d'abord avec is_active=True, puis sans cette condition
@@ -4229,8 +3748,8 @@ async def get_booking_details_from_schedules(
             if not movie:
                 movie = await db.movies.find_one({"id": content_id})
             if movie:
-                movie_title_result = movie.get("title")
-                logging.info(f"✅ Film trouvé directement via content_id: {movie_title_result}")
+                movie_title = movie.get("title")
+                logging.info(f"✅ Film trouvé directement via content_id: {movie_title}")
             else:
                 logging.warning(f"⚠️ Film non trouvé avec content_id={content_id}")
         elif content_type == "event":
@@ -4239,92 +3758,40 @@ async def get_booking_details_from_schedules(
             if not event:
                 event = await db.events.find_one({"id": content_id})
             if event:
-                movie_title_result = event.get("title")
-                logging.info(f"✅ Événement trouvé directement via content_id: {movie_title_result}")
+                movie_title = event.get("title")
+                logging.info(f"✅ Événement trouvé directement via content_id: {movie_title}")
             else:
                 logging.warning(f"⚠️ Événement non trouvé avec content_id={content_id}")
     
-        # Tentative 1 : récupérer d'abord le content_schedule correspondant exactement
-        # au couple (date, content_id, content_type). Cela permet d'avoir un entry_time
-        # spécifique par film même si plusieurs films partagent le même time_slot.
-        precise_content_schedule = await db.content_schedules.find_one({
-            "date": booking_date_str,
-            "content_id": content_id,
-            "content_type": content_type,
-            "is_active": True,
-        })
-        if not precise_content_schedule:
-            precise_content_schedule = await db.content_schedules.find_one({
-                "date": booking_date_str,
-                "content_id": content_id,
-                "content_type": content_type,
-            })
-
-        if precise_content_schedule:
-            logging.info(
-                "✅ content_schedule précis trouvé pour content_id=%s, type=%s",
-                content_id,
-                content_type,
-            )
-            entry_time = precise_content_schedule.get("entry_time") or entry_time
-
-    # Chercher dans content_schedules d'abord (nouveau système) si on n'a pas encore
-    # trouvé d'entry_time via la jointure précise ci‑dessus.
-    # Si on a movie_title en paramètre, chercher tous les schedules et trouver celui qui correspond
-    # Utiliser le paramètre movie_title si fourni, sinon utiliser movie_title_result
-    search_movie_title = movie_title if movie_title else movie_title_result
-    # Rechercher par movie_title si entry_time n'est pas trouvé OU si c'est la valeur par défaut suspecte "17h45"
-    if search_movie_title and (not entry_time or entry_time == "17h45"):
-        # Chercher tous les schedules pour cette date + time_slot
-        all_schedules = await db.content_schedules.find({
-            "date": booking_date_str,
+    # Chercher dans content_schedules d'abord (nouveau système)
+    # Essayer avec le time_slot normalisé, puis avec l'original
+    # Essayer aussi avec différents formats de date
+    date_variants = [booking_date_str]
+    # Si la date contient un séparateur, essayer aussi sans
+    if '-' in booking_date_str:
+        date_variants.append(booking_date_str.replace('-', ''))
+    
+    content_schedule = None
+    for date_var in date_variants:
+        content_schedule = await db.content_schedules.find_one({
+            "date": date_var,
             "time_slot": {"$in": [normalized_time_slot, time_slot_str]},
             "is_active": True
-        }).to_list(100)
-        
-        if not all_schedules:
-            all_schedules = await db.content_schedules.find({
-                "date": booking_date_str,
-                "time_slot": {"$in": [normalized_time_slot, time_slot_str]}
-            }).to_list(100)
-        
-        # Pour chaque schedule, vérifier si le titre correspond
-        for schedule in all_schedules:
-            schedule_content_id = schedule.get("content_id")
-            schedule_content_type = schedule.get("content_type", "movie")
-            
-            if schedule_content_type == "movie" and schedule_content_id:
-                movie = await db.movies.find_one({"id": schedule_content_id})
-                if movie and movie.get("title") == search_movie_title:
-                    content_schedule = schedule
-                    entry_time = schedule.get("entry_time")
-                    logging.info(f"✅ Schedule trouvé via movie_title '{search_movie_title}': entry_time={entry_time}")
-                    break
-            elif schedule_content_type == "event" and schedule_content_id:
-                event = await db.events.find_one({"id": schedule_content_id})
-                if event and event.get("title") == search_movie_title:
-                    content_schedule = schedule
-                    entry_time = schedule.get("entry_time")
-                    logging.info(f"✅ Schedule trouvé via movie_title '{search_movie_title}': entry_time={entry_time}")
-                    break
-        
-        if not content_schedule:
-            logging.warning(f"⚠️ Aucun schedule trouvé pour movie_title '{search_movie_title}' à {booking_date_str} {time_slot_str}")
-    
-    # Si on n'a pas encore trouvé, chercher normalement
-    if not content_schedule:
-    content_schedule = await db.content_schedules.find_one({
-        "date": booking_date_str,
-        "time_slot": {"$in": [normalized_time_slot, time_slot_str]},
-        "is_active": True
-    })
+        })
+        if content_schedule:
+            logging.info(f"✅ Trouvé content_schedule avec date={date_var}")
+            break
     
     # Si pas trouvé avec is_active=True, chercher sans cette condition (pour les anciennes réservations)
     if not content_schedule:
-        content_schedule = await db.content_schedules.find_one({
-            "date": booking_date_str,
-            "time_slot": {"$in": [normalized_time_slot, time_slot_str]}
-        })
+        for date_var in date_variants:
+            content_schedule = await db.content_schedules.find_one({
+                "date": date_var,
+                "time_slot": {"$in": [normalized_time_slot, time_slot_str]}
+            })
+            if content_schedule:
+                logging.info(f"✅ Trouvé content_schedule (inactif) avec date={date_var}")
+                break
     
     if content_schedule:
         logging.info(f"✅ Trouvé content_schedule: {content_schedule.get('content_id')}, type: {content_schedule.get('content_type')}")
@@ -4341,8 +3808,8 @@ async def get_booking_details_from_schedules(
             if not movie:
                 movie = await db.movies.find_one({"id": schedule_content_id})
             if movie:
-                movie_title_result = movie.get("title")
-                logging.info(f"✅ Film trouvé via content_schedule: {movie_title_result}")
+                movie_title = movie.get("title")
+                logging.info(f"✅ Film trouvé via content_schedule: {movie_title}")
             else:
                 logging.warning(f"⚠️ Film non trouvé avec content_id={schedule_content_id} depuis content_schedule")
         elif schedule_content_type == "event" and schedule_content_id:
@@ -4351,69 +3818,89 @@ async def get_booking_details_from_schedules(
             if not event:
                 event = await db.events.find_one({"id": schedule_content_id})
             if event:
-                movie_title_result = event.get("title")
-                logging.info(f"✅ Événement trouvé via content_schedule: {movie_title_result}")
+                movie_title = event.get("title")
+                logging.info(f"✅ Événement trouvé via content_schedule: {movie_title}")
             else:
                 logging.warning(f"⚠️ Événement non trouvé avec content_id={schedule_content_id} depuis content_schedule")
         
         # Si entry_time n'est pas dans content_schedule, chercher dans movie_schedules legacy
         if not entry_time:
-            movie_schedule_temp = await db.movie_schedules.find_one({
-                "date": booking_date_str,
+            movie_schedule_temp = None
+            for date_var in date_variants:
+                movie_schedule_temp = await db.movie_schedules.find_one({
+                    "date": date_var,
+                    "time_slot": {"$in": [normalized_time_slot, time_slot_str]},
+                    "is_active": True
+                })
+                if movie_schedule_temp:
+                    break
+            if not movie_schedule_temp:
+                for date_var in date_variants:
+                    movie_schedule_temp = await db.movie_schedules.find_one({
+                        "date": date_var,
+                        "time_slot": {"$in": [normalized_time_slot, time_slot_str]}
+                    })
+                    if movie_schedule_temp:
+                        break
+            if movie_schedule_temp:
+                entry_time = movie_schedule_temp.get("entry_time")
+                logging.info(f"✅ entry_time trouvé dans movie_schedule: {entry_time}")
+    else:
+        logging.info(f"⚠️ Aucun content_schedule trouvé pour date={booking_date_str}, time_slot={normalized_time_slot or time_slot_str}")
+        # Recherche de secours : chercher tous les schedules pour cette date (peu importe le time_slot)
+        for date_var in date_variants:
+            all_schedules = await db.content_schedules.find({
+                "date": date_var,
+                "is_active": True
+            }).to_list(10)
+            if all_schedules:
+                logging.info(f"ℹ️ Trouvé {len(all_schedules)} content_schedule(s) pour cette date (sans filtre time_slot)")
+                # Prendre le premier schedule trouvé comme fallback
+                content_schedule = all_schedules[0]
+                logging.info(f"✅ Utilisation du schedule de secours: content_id={content_schedule.get('content_id')}, time_slot={content_schedule.get('time_slot')}")
+                entry_time = content_schedule.get("entry_time")
+                # Récupérer le titre
+                schedule_content_type = content_schedule.get("content_type", "movie")
+                schedule_content_id = content_schedule.get("content_id")
+                if schedule_content_type == "movie" and schedule_content_id:
+                    movie = await db.movies.find_one({"id": schedule_content_id, "is_active": True})
+                    if not movie:
+                        movie = await db.movies.find_one({"id": schedule_content_id})
+                    if movie:
+                        movie_title = movie.get("title")
+                        logging.info(f"✅ Film trouvé via schedule de secours: {movie_title}")
+                elif schedule_content_type == "event" and schedule_content_id:
+                    event = await db.events.find_one({"id": schedule_content_id, "is_active": True})
+                    if not event:
+                        event = await db.events.find_one({"id": schedule_content_id})
+                    if event:
+                        movie_title = event.get("title")
+                        logging.info(f"✅ Événement trouvé via schedule de secours: {movie_title}")
+                break
+    
+    # Si pas trouvé dans content_schedules, chercher dans movie_schedules legacy
+    if not entry_time or not movie_title:
+        movie_schedule = None
+        for date_var in date_variants:
+            movie_schedule = await db.movie_schedules.find_one({
+                "date": date_var,
                 "time_slot": {"$in": [normalized_time_slot, time_slot_str]},
                 "is_active": True
             })
-            if not movie_schedule_temp:
-                movie_schedule_temp = await db.movie_schedules.find_one({
-                    "date": booking_date_str,
-                    "time_slot": {"$in": [normalized_time_slot, time_slot_str]}
-                })
-            if movie_schedule_temp:
-                entry_time = movie_schedule_temp.get("entry_time")
-    else:
-        logging.info(f"⚠️ Aucun content_schedule trouvé pour date={booking_date_str}, time_slot={normalized_time_slot or time_slot_str}")
-    
-    # Si pas trouvé dans content_schedules, chercher dans movie_schedules legacy
-    # Si on a search_movie_title, chercher tous les movie_schedules et trouver celui qui correspond
-    if search_movie_title and (not entry_time or entry_time == "17h45"):
-        # Chercher tous les movie_schedules pour cette date + time_slot
-        all_movie_schedules = await db.movie_schedules.find({
-            "date": booking_date_str,
-            "time_slot": {"$in": [normalized_time_slot, time_slot_str]},
-            "is_active": True
-        }).to_list(100)
-        
-        if not all_movie_schedules:
-            all_movie_schedules = await db.movie_schedules.find({
-                "date": booking_date_str,
-                "time_slot": {"$in": [normalized_time_slot, time_slot_str]}
-            }).to_list(100)
-        
-        # Pour chaque schedule, vérifier si le titre correspond
-        for schedule in all_movie_schedules:
-            movie_id = schedule.get("movie_id")
-            if movie_id:
-                movie = await db.movies.find_one({"id": movie_id})
-                if movie and movie.get("title") == search_movie_title:
-                    entry_time = schedule.get("entry_time")
-                    movie_title_result = movie.get("title")
-                    logging.info(f"✅ movie_schedule trouvé via movie_title '{search_movie_title}': entry_time={entry_time}")
-                    break
-    
-    # Si toujours pas trouvé, chercher normalement (sans filtre par movie_title)
-    if not entry_time or not movie_title_result:
-        movie_schedule = await db.movie_schedules.find_one({
-            "date": booking_date_str,
-            "time_slot": {"$in": [normalized_time_slot, time_slot_str]},
-            "is_active": True
-        })
+            if movie_schedule:
+                logging.info(f"✅ Trouvé movie_schedule avec date={date_var}")
+                break
         
         # Si pas trouvé avec is_active=True, chercher sans cette condition
         if not movie_schedule:
-            movie_schedule = await db.movie_schedules.find_one({
-                "date": booking_date_str,
-                "time_slot": {"$in": [normalized_time_slot, time_slot_str]}
-            })
+            for date_var in date_variants:
+                movie_schedule = await db.movie_schedules.find_one({
+                    "date": date_var,
+                    "time_slot": {"$in": [normalized_time_slot, time_slot_str]}
+                })
+                if movie_schedule:
+                    logging.info(f"✅ Trouvé movie_schedule (inactif) avec date={date_var}")
+                    break
         
         if movie_schedule:
             logging.info(f"✅ Trouvé movie_schedule legacy: movie_id={movie_schedule.get('movie_id')}")
@@ -4422,49 +3909,122 @@ async def get_booking_details_from_schedules(
                 entry_time = movie_schedule.get("entry_time")
             
             # Récupérer movie_title via movie_id (jointure avec movies)
-            if not movie_title_result:
+            if not movie_title:
                 movie_id = movie_schedule.get("movie_id")
                 if movie_id:
                     movie = await db.movies.find_one({"id": movie_id, "is_active": True})
                     if not movie:
                         movie = await db.movies.find_one({"id": movie_id})
                     if movie:
-                        movie_title_result = movie.get("title")
-                        logging.info(f"✅ Film trouvé via movie_schedule: {movie_title_result}")
+                        movie_title = movie.get("title")
+                        logging.info(f"✅ Film trouvé via movie_schedule: {movie_title}")
                     else:
                         logging.warning(f"⚠️ Film non trouvé avec movie_id={movie_id}")
                 else:
                     logging.warning(f"⚠️ movie_schedule n'a pas de movie_id")
         else:
             logging.warning(f"⚠️ Aucun movie_schedule trouvé pour date={booking_date_str}, time_slot={normalized_time_slot or time_slot_str}")
+            # Recherche de secours : chercher tous les movie_schedules pour cette date
+            for date_var in date_variants:
+                all_movie_schedules = await db.movie_schedules.find({
+                    "date": date_var,
+                    "is_active": True
+                }).to_list(10)
+                if all_movie_schedules:
+                    logging.info(f"ℹ️ Trouvé {len(all_movie_schedules)} movie_schedule(s) pour cette date (sans filtre time_slot)")
+                    # Prendre le premier schedule trouvé comme fallback
+                    movie_schedule = all_movie_schedules[0]
+                    logging.info(f"✅ Utilisation du movie_schedule de secours: movie_id={movie_schedule.get('movie_id')}, time_slot={movie_schedule.get('time_slot')}")
+                    if not entry_time:
+                        entry_time = movie_schedule.get("entry_time")
+                    if not movie_title:
+                        movie_id = movie_schedule.get("movie_id")
+                        if movie_id:
+                            movie = await db.movies.find_one({"id": movie_id, "is_active": True})
+                            if not movie:
+                                movie = await db.movies.find_one({"id": movie_id})
+                            if movie:
+                                movie_title = movie.get("title")
+                                logging.info(f"✅ Film trouvé via movie_schedule de secours: {movie_title}")
+                    break
     
     # Si entry_time n'est toujours pas trouvé, utiliser TimeSlotSettings
     if not entry_time:
-        time_settings = await get_time_slot_settings()
-        time_slot_str_lower = str(time_slot_str).lower()
-        
-        if time_slot_str_lower == "21h15" or time_slot_str_lower == time_settings.first_slot_value.lower():
-            entry_time = time_settings.first_slot_entry_time
-        elif time_slot_str_lower == "23h45" or time_slot_str_lower == time_settings.second_slot_value.lower():
-            entry_time = time_settings.second_slot_entry_time
-        elif time_slot_str_lower == "01h30" or time_slot_str_lower == time_settings.third_slot_value.lower():
-            entry_time = time_settings.third_slot_entry_time
+        try:
+            time_settings = await get_time_slot_settings()
+            time_slot_str_lower = str(time_slot_str).lower().strip()
+            normalized_time_slot_lower = str(normalized_time_slot).lower().strip() if normalized_time_slot else ""
+            
+            # Comparer avec les valeurs des settings (en minuscules et sans espaces)
+            first_slot_lower = time_settings.first_slot_value.lower().strip() if time_settings.first_slot_value else ""
+            second_slot_lower = time_settings.second_slot_value.lower().strip() if time_settings.second_slot_value else ""
+            third_slot_lower = time_settings.third_slot_value.lower().strip() if time_settings.third_slot_value else ""
+            
+            logging.info(f"🔍 Recherche entry_time dans TimeSlotSettings: time_slot={time_slot_str_lower}, normalized={normalized_time_slot_lower}")
+            logging.info(f"🔍 Comparaison avec: first={first_slot_lower}, second={second_slot_lower}, third={third_slot_lower}")
+            
+            if (time_slot_str_lower == "21h15" or 
+                time_slot_str_lower == first_slot_lower or 
+                normalized_time_slot_lower == first_slot_lower):
+                entry_time = time_settings.first_slot_entry_time
+                logging.info(f"✅ entry_time trouvé via first_slot: {entry_time}")
+            elif (time_slot_str_lower == "23h45" or 
+                  time_slot_str_lower == second_slot_lower or 
+                  normalized_time_slot_lower == second_slot_lower):
+                entry_time = time_settings.second_slot_entry_time
+                logging.info(f"✅ entry_time trouvé via second_slot: {entry_time}")
+            elif (time_slot_str_lower == "01h30" or 
+                  time_slot_str_lower == third_slot_lower or 
+                  normalized_time_slot_lower == third_slot_lower):
+                entry_time = time_settings.third_slot_entry_time
+                logging.info(f"✅ entry_time trouvé via third_slot: {entry_time}")
+            else:
+                logging.warning(f"⚠️ Aucune correspondance trouvée dans TimeSlotSettings pour time_slot={time_slot_str_lower}")
+        except Exception as e:
+            logging.error(f"❌ Erreur lors de la récupération de TimeSlotSettings: {e}")
     
-    # Utiliser le paramètre movie_title si fourni, sinon utiliser movie_title_result
-    final_movie_title = movie_title if movie_title else movie_title_result
-    
-    if not final_movie_title:
+    if not movie_title:
         logging.warning(f"❌ Aucun titre de film trouvé pour booking_date={booking_date_str}, time_slot={time_slot_str}")
     
     # S'assurer qu'entry_time est toujours renvoyé (même si c'est une valeur par défaut)
     if not entry_time:
-        logging.warning(f"⚠️ entry_time non trouvé, utilisation d'une valeur par défaut basée sur time_slot={time_slot_str}")
-        # En dernier recours, utiliser le time_slot comme entry_time
-        entry_time = time_slot_str
+        logging.warning(f"⚠️ entry_time non trouvé, tentative de récupération depuis TimeSlotSettings avec time_slot={time_slot_str}")
+        try:
+            time_settings = await get_time_slot_settings()
+            # En dernier recours, utiliser les valeurs par défaut des TimeSlotSettings
+            # Si le time_slot contient "21" ou "premier", utiliser first_slot_entry_time
+            # Si le time_slot contient "23" ou "deuxième", utiliser second_slot_entry_time
+            # Si le time_slot contient "01" ou "troisième", utiliser third_slot_entry_time
+            time_slot_str_lower = str(time_slot_str).lower()
+            if "21" in time_slot_str_lower or "premier" in time_slot_str_lower:
+                entry_time = time_settings.first_slot_entry_time or "18h45"
+                logging.info(f"✅ Utilisation de first_slot_entry_time par défaut: {entry_time}")
+            elif "23" in time_slot_str_lower or "deuxième" in time_slot_str_lower or "second" in time_slot_str_lower:
+                entry_time = time_settings.second_slot_entry_time or "21h00"
+                logging.info(f"✅ Utilisation de second_slot_entry_time par défaut: {entry_time}")
+            elif "01" in time_slot_str_lower or "troisième" in time_slot_str_lower or "third" in time_slot_str_lower:
+                entry_time = time_settings.third_slot_entry_time or "23h15"
+                logging.info(f"✅ Utilisation de third_slot_entry_time par défaut: {entry_time}")
+            else:
+                # Fallback absolu : utiliser first_slot_entry_time
+                entry_time = time_settings.first_slot_entry_time or "18h45"
+                logging.warning(f"⚠️ Utilisation du fallback absolu (first_slot_entry_time): {entry_time}")
+        except Exception as e:
+            logging.error(f"❌ Erreur lors de la récupération des TimeSlotSettings pour le fallback: {e}")
+            # Fallback final : utiliser une valeur par défaut basée sur le time_slot
+            if "21" in str(time_slot_str).lower():
+                entry_time = "18h45"
+            elif "23" in str(time_slot_str).lower():
+                entry_time = "21h00"
+            elif "01" in str(time_slot_str).lower():
+                entry_time = "23h15"
+            else:
+                entry_time = "18h45"  # Valeur par défaut
+            logging.warning(f"⚠️ Utilisation d'une valeur par défaut hardcodée: {entry_time}")
     
     return {
         "entry_time": entry_time,
-        "movie_title": final_movie_title
+        "movie_title": movie_title
     }
 
 # Helper function to get entry time for a booking (kept for backward compatibility)
@@ -4576,7 +4136,6 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
             
             # Récupérer entry_time et movie_title via jointures avec movie_schedules/content_schedules et movies
             # Jointure: bookings (booking_date, time_slot) -> movie_schedules/content_schedules -> movies
-            # Première passe : récupérer movie_title normalement
             booking_details = await get_booking_details_from_schedules(
                 booking_obj.booking_date,
                 booking_obj.time_slot,
@@ -4584,46 +4143,9 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
                 booking_obj.content_type
             )
             
-            # Si on n'a pas entry_time stocké mais qu'on a movie_title, réessayer avec movie_title comme filtre
-            # pour trouver le bon schedule (utile pour les anciennes réservations)
-            # TOUJOURS réessayer si entry_time est 17h45 (valeur par défaut suspecte) ou manquant
-            movie_title_from_details = booking_details.get("movie_title")
-            if movie_title_from_details and (not booking_obj.entry_time or booking_details.get("entry_time") == "17h45"):
-                logging.info(f"🔍 Tentative de correction entry_time pour réservation {booking_obj.id} avec movie_title: {movie_title_from_details}")
-                booking_details_with_title = await get_booking_details_from_schedules(
-                    booking_obj.booking_date,
-                    booking_obj.time_slot,
-                    booking_obj.content_id,
-                    booking_obj.content_type,
-                    movie_title_from_details
-                )
-                # Utiliser entry_time de la deuxième passe si différent de 17h45 ou meilleur
-                new_entry_time = booking_details_with_title.get("entry_time")
-                if new_entry_time and new_entry_time != "17h45":
-                    booking_details["entry_time"] = new_entry_time
-                    logging.info(f"✅ Réservation {booking_obj.id} - entry_time corrigé via movie_title: {new_entry_time} (était: {booking_details.get('entry_time')})")
-                elif new_entry_time and booking_details.get("entry_time") == "17h45":
-                    # Même si c'est toujours 17h45, on l'utilise car c'est le résultat de la recherche précise
-                    booking_details["entry_time"] = new_entry_time
-                    logging.info(f"⚠️ Réservation {booking_obj.id} - entry_time reste 17h45 après recherche précise")
-            
             # Ajouter entry_time et movie_title au dictionnaire de réponse
             booking_dict = booking_obj.dict()
-            # Convertir les dates en strings pour la sérialisation JSON
-            if isinstance(booking_dict.get("booking_date"), date):
-                booking_dict["booking_date"] = booking_dict["booking_date"].isoformat()
-            if isinstance(booking_dict.get("created_at"), datetime):
-                booking_dict["created_at"] = booking_dict["created_at"].isoformat()
-            if isinstance(booking_dict.get("checked_in_at"), datetime):
-                booking_dict["checked_in_at"] = booking_dict["checked_in_at"].isoformat()
-            
-            # entry_time stocké en base a priorité, sinon on utilise celui dérivé
-            stored_entry_time = booking_obj.entry_time if booking_obj.entry_time else None
-            if stored_entry_time:
-                booking_dict["entry_time"] = stored_entry_time
-            else:
             booking_dict["entry_time"] = booking_details.get("entry_time")
-            
             booking_dict["movie_title"] = booking_details.get("movie_title")
             
             enriched_recent_bookings.append(booking_dict)
@@ -4654,7 +4176,7 @@ async def get_admin_dashboard(admin = Depends(get_admin_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération du dashboard: {str(e)}")
 
-@api_router.get("/admin/bookings")
+@api_router.get("/admin/bookings", response_model=List[TicketBooking])
 async def get_all_admin_bookings(admin = Depends(get_admin_user)):
     try:
         bookings = await db.bookings.find().to_list(1000)
@@ -4666,7 +4188,6 @@ async def get_all_admin_bookings(admin = Depends(get_admin_user)):
             
             # Récupérer entry_time et movie_title via jointures avec movie_schedules/content_schedules et movies
             # Jointure: bookings (booking_date, time_slot) -> movie_schedules/content_schedules -> movies
-            # Première passe : récupérer movie_title normalement
             booking_details = await get_booking_details_from_schedules(
                 booking_obj.booking_date,
                 booking_obj.time_slot,
@@ -4674,56 +4195,22 @@ async def get_all_admin_bookings(admin = Depends(get_admin_user)):
                 booking_obj.content_type
             )
             
-            # Si on n'a pas entry_time stocké mais qu'on a movie_title, réessayer avec movie_title comme filtre
-            # pour trouver le bon schedule (utile pour les anciennes réservations)
-            # TOUJOURS réessayer si entry_time est 17h45 (valeur par défaut suspecte) ou manquant
-            movie_title_from_details = booking_details.get("movie_title")
-            if movie_title_from_details and (not booking_obj.entry_time or booking_details.get("entry_time") == "17h45"):
-                logging.info(f"🔍 Tentative de correction entry_time pour réservation {booking_obj.id} avec movie_title: {movie_title_from_details}")
-                booking_details_with_title = await get_booking_details_from_schedules(
-                    booking_obj.booking_date,
-                    booking_obj.time_slot,
-                    booking_obj.content_id,
-                    booking_obj.content_type,
-                    movie_title_from_details
-                )
-                # Utiliser entry_time de la deuxième passe si différent de 17h45 ou meilleur
-                new_entry_time = booking_details_with_title.get("entry_time")
-                if new_entry_time and new_entry_time != "17h45":
-                    booking_details["entry_time"] = new_entry_time
-                    logging.info(f"✅ Réservation {booking_obj.id} - entry_time corrigé via movie_title: {new_entry_time} (était: {booking_details.get('entry_time')})")
-                elif new_entry_time and booking_details.get("entry_time") == "17h45":
-                    # Même si c'est toujours 17h45, on l'utilise car c'est le résultat de la recherche précise
-                    booking_details["entry_time"] = new_entry_time
-                    logging.info(f"⚠️ Réservation {booking_obj.id} - entry_time reste 17h45 après recherche précise")
-            
             # Ajouter entry_time et movie_title au dictionnaire de réponse
             booking_dict = booking_obj.dict()
-            # Convertir les dates en strings pour la sérialisation JSON
-            if isinstance(booking_dict.get("booking_date"), date):
-                booking_dict["booking_date"] = booking_dict["booking_date"].isoformat()
-            if isinstance(booking_dict.get("created_at"), datetime):
-                booking_dict["created_at"] = booking_dict["created_at"].isoformat()
-            if isinstance(booking_dict.get("checked_in_at"), datetime):
-                booking_dict["checked_in_at"] = booking_dict["checked_in_at"].isoformat()
+            entry_time_result = booking_details.get("entry_time")
+            movie_title_result = booking_details.get("movie_title")
             
-            # entry_time stocké en base a priorité, sinon on utilise celui dérivé
-            # Vérifier explicitement si entry_time existe et n'est pas vide
-            stored_entry_time = booking_obj.entry_time if booking_obj.entry_time else None
-            if stored_entry_time:
-                booking_dict["entry_time"] = stored_entry_time
-                logging.info(f"✅ Réservation {booking_obj.id} - Utilisation entry_time stocké: {stored_entry_time}")
-            else:
-                derived_entry_time = booking_details.get("entry_time")
-                booking_dict["entry_time"] = derived_entry_time
-                logging.info(f"⚠️ Réservation {booking_obj.id} - Utilisation entry_time dérivé: {derived_entry_time}")
-            
-            booking_dict["movie_title"] = booking_details.get("movie_title")
+            booking_dict["entry_time"] = entry_time_result
+            booking_dict["movie_title"] = movie_title_result
             
             # Log pour déboguer
-            logging.info(f"📋 Réservation {booking_obj.id} - entry_time final={booking_dict.get('entry_time')}, movie_title={booking_dict.get('movie_title')}, content_id={booking_obj.content_id}, content_type={booking_obj.content_type}, stored_entry_time={stored_entry_time}")
-            if not booking_dict.get("movie_title"):
+            logging.info(f"📋 Réservation {booking_obj.id} ({booking_obj.first_name} {booking_obj.last_name}) - entry_time={entry_time_result}, movie_title={movie_title_result}, content_id={booking_obj.content_id}, content_type={booking_obj.content_type}, date={booking_obj.booking_date}, time_slot={booking_obj.time_slot}")
+            
+            if not movie_title_result:
                 logging.warning(f"⚠️ Réservation {booking_obj.id} ({booking_obj.first_name} {booking_obj.last_name}) - Pas de titre trouvé. content_id={booking_obj.content_id}, content_type={booking_obj.content_type}, date={booking_obj.booking_date}, time_slot={booking_obj.time_slot}")
+            
+            if not entry_time_result or entry_time_result == booking_obj.time_slot:
+                logging.warning(f"⚠️ Réservation {booking_obj.id} - entry_time non trouvé ou égal au time_slot. entry_time={entry_time_result}, time_slot={booking_obj.time_slot}")
             
             enriched_bookings.append(booking_dict)
         
@@ -4774,17 +4261,8 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("startup")
 async def startup_db_tasks():
-    # En production serverless, ne pas bloquer le démarrage avec la vérification MongoDB
-    # La connexion sera établie de manière lazy à la première requête
-    if is_production:
-        logging.info("🚀 Démarrage en mode production - connexion MongoDB sera établie à la première requête")
-        # Ne pas vérifier la connexion au démarrage en production (évite les timeouts)
-        return
-    
-    # En développement, vérifier la connexion au démarrage
-    try:
-        # Utiliser un timeout court pour ne pas bloquer le démarrage
-        if await asyncio.wait_for(check_mongodb_connection(), timeout=5.0):
+    # Vérifier la connexion MongoDB
+    if await check_mongodb_connection():
         logging.info("✅ Connexion MongoDB établie")
         try:
             await migrate_legacy_time_slots()
@@ -4799,9 +4277,6 @@ async def startup_db_tasks():
         logging.warning("   1. Installez MongoDB localement, OU")
         logging.warning("   2. Utilisez MongoDB Atlas (gratuit) : https://www.mongodb.com/cloud/atlas")
         logging.warning("   3. Configurez MONGO_URL dans votre fichier .env")
-    except asyncio.TimeoutError:
-        logging.warning("⚠️  Timeout lors de la vérification MongoDB au démarrage")
-        logging.warning("   La connexion sera réessayée à la première requête")
 
 
 @app.on_event("shutdown")
