@@ -338,16 +338,43 @@ const AdminDashboard = ({ onLogout }) => {
                 </TableRow>
               </TableHeader>
             <TableBody>
-              {dashboardData?.recent_bookings?.map((booking) => (
-                <TableRow key={booking.id}>
-                  <TableCell>{booking.first_name} {booking.last_name}</TableCell>
-                  <TableCell>{format(new Date(booking.booking_date), 'PP', { locale: fr })}</TableCell>
-                  <TableCell className="font-medium">{booking.movie_title || 'N/A'}</TableCell>
-                  <TableCell>{booking.entry_time || 'N/A'}</TableCell>
-                  <TableCell className="font-medium">{booking.nb_personne || 1}</TableCell>
-                  <TableCell>{getStatusBadge(booking.status, booking.payment_status)}</TableCell>
-                </TableRow>
-              ))}
+              {dashboardData?.recent_bookings?.map((booking) => {
+                // Formater l'affichage du créneau : entry_time → time_slot ou juste time_slot
+                const formatTimeSlot = () => {
+                  if (booking.entry_time && booking.time_slot) {
+                    if (booking.entry_time !== booking.time_slot) {
+                      return `${booking.entry_time} → ${booking.time_slot}`;
+                    }
+                    return booking.entry_time;
+                  }
+                  return booking.entry_time || booking.time_slot || 'N/A';
+                };
+
+                // Formater l'affichage du film
+                const formatMovie = () => {
+                  if (booking.movie_title) {
+                    return booking.movie_title;
+                  }
+                  if (booking.content_type === 'event') {
+                    return 'Événement';
+                  }
+                  if (booking.content_type === 'movie') {
+                    return 'Film (titre non trouvé)';
+                  }
+                  return 'N/A';
+                };
+
+                return (
+                  <TableRow key={booking.id}>
+                    <TableCell>{booking.first_name} {booking.last_name}</TableCell>
+                    <TableCell>{format(new Date(booking.booking_date), 'PP', { locale: fr })}</TableCell>
+                    <TableCell className="font-medium">{formatMovie()}</TableCell>
+                    <TableCell>{formatTimeSlot()}</TableCell>
+                    <TableCell className="font-medium">{booking.nb_personne || 1}</TableCell>
+                    <TableCell>{getStatusBadge(booking.status, booking.payment_status)}</TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
           </div>
@@ -425,28 +452,58 @@ const AdminDashboard = ({ onLogout }) => {
                 </TableRow>
               </TableHeader>
             <TableBody>
-              {bookings.map((booking) => (
-                <TableRow key={booking.id}>
-                  <TableCell className="font-mono text-xs">{booking.id.substring(0, 8)}...</TableCell>
-                  <TableCell className="font-medium">{booking.first_name} {booking.last_name}</TableCell>
-                  <TableCell className="hidden sm:table-cell text-sm">{booking.email}</TableCell>
-                  <TableCell className="text-sm">{format(new Date(booking.booking_date), 'PP', { locale: fr })}</TableCell>
-                  <TableCell className="text-sm font-medium">{booking.movie_title || 'N/A'}</TableCell>
-                  <TableCell className="text-sm">{booking.entry_time || 'N/A'}</TableCell>
-                  <TableCell className="text-sm font-medium">{booking.nb_personne || 1}</TableCell>
-                  <TableCell>{getStatusBadge(booking.status, booking.payment_status)}</TableCell>
-                  <TableCell>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setEditingBooking(booking)}
-                      className="w-full sm:w-auto"
-                    >
-                      <Settings className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {bookings.map((booking) => {
+                // Formater l'affichage du créneau : entry_time → time_slot ou juste time_slot
+                const formatTimeSlot = () => {
+                  if (booking.entry_time && booking.time_slot) {
+                    // Si on a les deux, afficher entry_time → time_slot
+                    if (booking.entry_time !== booking.time_slot) {
+                      return `${booking.entry_time} → ${booking.time_slot}`;
+                    }
+                    return booking.entry_time;
+                  }
+                  // Sinon, afficher au moins le time_slot
+                  return booking.entry_time || booking.time_slot || 'N/A';
+                };
+
+                // Formater l'affichage du film
+                const formatMovie = () => {
+                  if (booking.movie_title) {
+                    return booking.movie_title;
+                  }
+                  // Si pas de titre mais on a un content_type, indiquer le type
+                  if (booking.content_type === 'event') {
+                    return 'Événement';
+                  }
+                  if (booking.content_type === 'movie') {
+                    return 'Film (titre non trouvé)';
+                  }
+                  return 'N/A';
+                };
+
+                return (
+                  <TableRow key={booking.id}>
+                    <TableCell className="font-mono text-xs">{booking.id.substring(0, 8)}...</TableCell>
+                    <TableCell className="font-medium">{booking.first_name} {booking.last_name}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-sm">{booking.email}</TableCell>
+                    <TableCell className="text-sm">{format(new Date(booking.booking_date), 'PP', { locale: fr })}</TableCell>
+                    <TableCell className="text-sm font-medium">{formatMovie()}</TableCell>
+                    <TableCell className="text-sm">{formatTimeSlot()}</TableCell>
+                    <TableCell className="text-sm font-medium">{booking.nb_personne || 1}</TableCell>
+                    <TableCell>{getStatusBadge(booking.status, booking.payment_status)}</TableCell>
+                    <TableCell>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setEditingBooking(booking)}
+                        className="w-full sm:w-auto"
+                      >
+                        <Settings className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
           </div>
