@@ -727,15 +727,21 @@ function App() {
         `${API}/movie-schedules/by-date/${dateString}`
       );
       const schedules = response.data || [];
-      
+
       // If we have pre-filled data and the schedule is not in the fetched schedules,
       // add it to the list so it can be displayed correctly
-      if (isPreFilled && preFillData && preFillData.schedule && preFillData.movie) {
+      if (
+        isPreFilled &&
+        preFillData &&
+        preFillData.schedule &&
+        preFillData.movie
+      ) {
         const preFilledScheduleExists = schedules.some(
-          (s) => s.schedule.time_slot === preFillData.timeSlot &&
-                 s.movie?.id === preFillData.movie.id
+          (s) =>
+            s.schedule.time_slot === preFillData.timeSlot &&
+            s.movie?.id === preFillData.movie.id
         );
-        
+
         if (!preFilledScheduleExists && preFillData.schedule) {
           // Create a schedule object in the same format as the API response
           const preFilledSchedule = {
@@ -756,7 +762,7 @@ function App() {
           schedules.unshift(preFilledSchedule);
         }
       }
-      
+
       setMovieSchedules(schedules);
 
       // Verify that the currently selected time slot is still valid
@@ -784,12 +790,12 @@ function App() {
               timeSlotSettings.second_slot_value || "23h45",
             ]
           : ["21h15", "23h45"];
-      
+
       // Also include selectedTimeSlot in availability check if it's set
       if (selectedTimeSlot && !timeSlotValues.includes(selectedTimeSlot)) {
         timeSlotValues.push(selectedTimeSlot);
       }
-      
+
       const availabilityPromises = timeSlotValues.map(async (timeSlot) => {
         try {
           const availResponse = await axios.get(
@@ -2038,6 +2044,7 @@ function App() {
               // Déterminer l'heure à afficher
               let displayTime = selectedTimeSlot;
               if (actualSchedule?.entry_time && actualSchedule?.start_time) {
+                console.log("actualSchedule", actualSchedule);
                 displayTime = `Entrée : ${actualSchedule.entry_time} • Diffusion : ${actualSchedule.start_time}`;
               } else if (actualSchedule?.start_time) {
                 displayTime = `Diffusion : ${actualSchedule.start_time}`;
@@ -2176,9 +2183,7 @@ function App() {
                                   {schedule.schedule.entry_time &&
                                   schedule.schedule.start_time
                                     ? `Film à ${schedule.schedule.start_time}${
-                                        schedule.schedule.end_time
-                                          ? ``
-                                          : ""
+                                        schedule.schedule.end_time ? `` : ""
                                       }`
                                     : isHalloween
                                     ? mapTimeSlotToHalloween(
@@ -2262,13 +2267,27 @@ function App() {
                                 <div className="font-medium">
                                   {preFillData.schedule?.entry_time &&
                                   preFillData.schedule?.start_time
-                                    ? `Entrée: ${preFillData.schedule.entry_time} • Début: ${preFillData.schedule.start_time}${preFillData.schedule.end_time ? ` • Fin: ${preFillData.schedule.end_time}` : ''}`
+                                    ? `Entrée: ${
+                                        preFillData.schedule.entry_time
+                                      } • Début: ${
+                                        preFillData.schedule.start_time
+                                      }${
+                                        preFillData.schedule.end_time
+                                          ? ` • Fin: ${preFillData.schedule.end_time}`
+                                          : ""
+                                      }`
                                     : getTimeSlotDisplay(preFillData.timeSlot)}
                                 </div>
                                 <div className="text-sm text-gray-300">
                                   {preFillData.schedule?.entry_time &&
                                   preFillData.schedule?.start_time
-                                    ? `Film à ${preFillData.schedule.start_time}${preFillData.schedule.end_time ? ` • Fin: ${preFillData.schedule.end_time}` : ''}`
+                                    ? `Film à ${
+                                        preFillData.schedule.start_time
+                                      }${
+                                        preFillData.schedule.end_time
+                                          ? ` • Fin: ${preFillData.schedule.end_time}`
+                                          : ""
+                                      }`
                                     : isHalloween
                                     ? mapTimeSlotToHalloween(
                                         preFillData.timeSlot
@@ -2332,17 +2351,29 @@ function App() {
                     // Priorité aux informations spécifiques du schedule
                     let displayTimeSlot = preFillData.timeSlot;
                     let displayCreneau = preFillData.timeSlot;
-                    
+
                     if (preFillData.schedule) {
                       // Utiliser les informations spécifiques du schedule si disponibles
                       if (
                         preFillData.schedule.entry_time &&
                         preFillData.schedule.start_time
                       ) {
-                        displayTimeSlot = `Entrée: ${preFillData.schedule.entry_time} • Début: ${preFillData.schedule.start_time}${preFillData.schedule.end_time ? ` • Fin: ${preFillData.schedule.end_time}` : ''}`;
+                        displayTimeSlot = `Entrée: ${
+                          preFillData.schedule.entry_time
+                        } • Début: ${preFillData.schedule.start_time}${
+                          preFillData.schedule.end_time
+                            ? ` • Fin: ${preFillData.schedule.end_time}`
+                            : ""
+                        }`;
                         displayCreneau = preFillData.schedule.start_time;
                       } else if (preFillData.schedule.start_time) {
-                        displayTimeSlot = `Début: ${preFillData.schedule.start_time}${preFillData.schedule.end_time ? ` • Fin: ${preFillData.schedule.end_time}` : ''}`;
+                        displayTimeSlot = `Début: ${
+                          preFillData.schedule.start_time
+                        }${
+                          preFillData.schedule.end_time
+                            ? ` • Fin: ${preFillData.schedule.end_time}`
+                            : ""
+                        }`;
                         displayCreneau = preFillData.schedule.start_time;
                       } else if (preFillData.schedule.custom_time) {
                         // Pour les événements avec custom_time
@@ -2368,7 +2399,10 @@ function App() {
                           )}{" "}
                           • Créneau: {displayCreneau}
                           {preFillData.schedule?.capacity && (
-                            <span> • Capacité: {preFillData.schedule.capacity} places</span>
+                            <span>
+                              {" "}
+                              • Capacité: {preFillData.schedule.capacity} places
+                            </span>
                           )}
                         </p>
                       </div>
