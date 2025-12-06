@@ -986,6 +986,34 @@ function App() {
           ? parseInt(formData.nbPersonneCustom)
           : parseInt(formData.nbPersonne);
 
+      // Get schedule times (entry_time, start_time, end_time) from the selected schedule
+      let entry_time = null;
+      let start_time = null;
+      let end_time = null;
+
+      // First, try to get from preFillData if available and matches the selected time slot
+      if (
+        isPreFilled &&
+        preFillData &&
+        preFillData.timeSlot === selectedTimeSlot &&
+        preFillData.schedule
+      ) {
+        entry_time = preFillData.schedule.entry_time || null;
+        start_time = preFillData.schedule.start_time || null;
+        end_time = preFillData.schedule.end_time || null;
+      } else {
+        // Otherwise, find the schedule in movieSchedules
+        const scheduleForSlot = movieSchedules.find(
+          (schedule) => schedule.schedule.time_slot === selectedTimeSlot
+        );
+
+        if (scheduleForSlot && scheduleForSlot.schedule) {
+          entry_time = scheduleForSlot.schedule.entry_time || null;
+          start_time = scheduleForSlot.schedule.start_time || null;
+          end_time = scheduleForSlot.schedule.end_time || null;
+        }
+      }
+
       // First create the booking
       const bookingData = {
         first_name: formData.firstName.trim(),
@@ -995,6 +1023,9 @@ function App() {
         booking_date: format(selectedDate, "yyyy-MM-dd"),
         day_of_week: selectedDayOfWeek,
         time_slot: selectedTimeSlot,
+        entry_time: entry_time,
+        start_time: start_time,
+        end_time: end_time,
         payment_method: formData.paymentMethod,
         promo_code: formData.promoCode
           ? formData.promoCode.trim().toUpperCase()
