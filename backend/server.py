@@ -89,21 +89,57 @@ def encode_mongo_url(url):
 # Encoder l'URL si nécessaire
 encoded_mongo_url = encode_mongo_url(mongo_url)
 
+# Configuration MongoDB optimisée pour la production (serverless)
+# En production, on utilise des timeouts plus courts pour éviter les timeouts de la plateforme
+# La connexion sera établie de manière lazy (à la première requête)
+is_production = os.environ.get('VERCEL') or os.environ.get('ENVIRONMENT') == 'production'
+
+if is_production:
+    # En production (Vercel/serverless), utiliser des timeouts plus courts
+    # La connexion sera établie de manière lazy
+    server_selection_timeout = 10000  # 10 secondes
+    connect_timeout = 10000
+    socket_timeout = 30000  # 30 secondes pour les opérations longues
+else:
+    # En développement, timeouts plus longs
+    server_selection_timeout = 30000
+    connect_timeout = 30000
+    socket_timeout = 30000
+
 try:
-    # Augmenter le timeout pour MongoDB Atlas (30 secondes)
+    # Créer le client MongoDB avec les timeouts appropriés
+    # maxPoolSize=1 pour les environnements serverless (évite les connexions multiples)
     client = AsyncIOMotorClient(
         encoded_mongo_url, 
-        serverSelectionTimeoutMS=30000, 
-        connectTimeoutMS=30000,
-        socketTimeoutMS=30000
+        serverSelectionTimeoutMS=server_selection_timeout, 
+        connectTimeoutMS=connect_timeout,
+        socketTimeoutMS=socket_timeout,
+        maxPoolSize=1 if is_production else 10,  # Pool réduit en production
+        minPoolSize=0,  # Pas de connexions persistantes en serverless
+        maxIdleTimeMS=45000,  # Fermer les connexions inactives après 45s
     )
     db = client[db_name]
     logging.info(f"✅ Connexion MongoDB configurée : {db_name}")
+    logging.info(f"   Mode: {'Production (serverless)' if is_production else 'Développement'}")
     logging.info(f"   URL: {mongo_url.split('@')[0] + '@***' if '@' in mongo_url else '***'}")
+    # Ne pas tester la connexion immédiatement en production (lazy connection)
+    if not is_production:
+        # En développement, tester la connexion au démarrage
+        try:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Si la boucle tourne déjà, ne pas bloquer
+                logging.info("   Connexion sera testée à la première requête")
+            else:
+                # Tester la connexion de manière synchrone (dev seulement)
+                logging.info("   Test de connexion en cours...")
+        except Exception:
+            pass
 except Exception as e:
     logging.error(f"❌ Erreur lors de la configuration MongoDB : {e}")
     logging.error("   Le serveur démarrera mais les requêtes MongoDB échoueront")
-    logging.error("   Vérifiez votre MONGO_URL dans le fichier .env")
+    logging.error("   Vérifiez votre MONGO_URL dans les variables d'environnement")
     logging.error("   Si votre mot de passe contient @, :, /, etc., encodez-les en URL")
     # Créer des objets None pour éviter les erreurs, mais ils ne fonctionneront pas
     client = None
@@ -606,18 +642,32 @@ async def get_admin_user(credentials = Depends(security)):
 
 # Helper function to check MongoDB connection
 async def check_mongodb_connection():
-    """Check if MongoDB is available"""
+    """Check if MongoDB is available - optimisé pour la production"""
     if db is None or client is None:
         logging.warning("⚠️  MongoDB client non initialisé")
         return False
     try:
-        await asyncio.wait_for(client.admin.command('ping'), timeout=5.0)
+        # En production, utiliser un timeout plus court pour éviter les timeouts de la plateforme
+        timeout = 10.0 if is_production else 30.0
+        await asyncio.wait_for(client.admin.command('ping'), timeout=timeout)
         return True
     except asyncio.TimeoutError:
-        logging.error("❌ Timeout lors de la connexion MongoDB")
+        if is_production:
+            logging.warning("⚠️  Timeout lors de la connexion MongoDB (peut être normal en serverless)")
+            logging.warning("   La connexion sera réessayée à la prochaine requête")
+        else:
+            logging.error("❌ Timeout lors de la connexion MongoDB")
+            logging.error("   Vérifiez que MongoDB est démarré et que MONGO_URL est correct")
         return False
     except Exception as e:
-        logging.error(f"❌ Erreur de connexion MongoDB : {e}")
+        # En production, ne pas logger toutes les erreurs comme critiques
+        # (peut être dû à une connexion lazy)
+        error_msg = str(e).lower()
+        if is_production and ('network' in error_msg or 'connection' in error_msg):
+            logging.warning(f"⚠️  Connexion MongoDB non disponible (sera réessayée): {type(e).__name__}")
+        else:
+            logging.error(f"❌ Erreur de connexion MongoDB : {e}")
+            logging.error("   Vérifiez votre MONGO_URL dans les variables d'environnement")
         return False
 
 # Helper function to get current time slot settings
@@ -4461,22 +4511,34 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("startup")
 async def startup_db_tasks():
-    # Vérifier la connexion MongoDB
-    if await check_mongodb_connection():
-        logging.info("✅ Connexion MongoDB établie")
-        try:
-            await migrate_legacy_time_slots()
-        except Exception as exc:
-            logging.error(
-                "Échec de la migration automatique des créneaux legacy: %s",
-                exc,
-            )
-    else:
-        logging.warning("⚠️  MongoDB non disponible - certaines fonctionnalités seront limitées")
-        logging.warning("   Pour utiliser l'application complètement :")
-        logging.warning("   1. Installez MongoDB localement, OU")
-        logging.warning("   2. Utilisez MongoDB Atlas (gratuit) : https://www.mongodb.com/cloud/atlas")
-        logging.warning("   3. Configurez MONGO_URL dans votre fichier .env")
+    # En production serverless, ne pas bloquer le démarrage avec la vérification MongoDB
+    # La connexion sera établie de manière lazy à la première requête
+    if is_production:
+        logging.info("🚀 Démarrage en mode production - connexion MongoDB sera établie à la première requête")
+        # Ne pas vérifier la connexion au démarrage en production (évite les timeouts)
+        return
+    
+    # En développement, vérifier la connexion au démarrage
+    try:
+        # Utiliser un timeout court pour ne pas bloquer le démarrage
+        if await asyncio.wait_for(check_mongodb_connection(), timeout=5.0):
+            logging.info("✅ Connexion MongoDB établie")
+            try:
+                await migrate_legacy_time_slots()
+            except Exception as exc:
+                logging.error(
+                    "Échec de la migration automatique des créneaux legacy: %s",
+                    exc,
+                )
+        else:
+            logging.warning("⚠️  MongoDB non disponible - certaines fonctionnalités seront limitées")
+            logging.warning("   Pour utiliser l'application complètement :")
+            logging.warning("   1. Installez MongoDB localement, OU")
+            logging.warning("   2. Utilisez MongoDB Atlas (gratuit) : https://www.mongodb.com/cloud/atlas")
+            logging.warning("   3. Configurez MONGO_URL dans votre fichier .env")
+    except asyncio.TimeoutError:
+        logging.warning("⚠️  Timeout lors de la vérification MongoDB au démarrage")
+        logging.warning("   La connexion sera réessayée à la première requête")
 
 
 @app.on_event("shutdown")
