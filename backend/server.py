@@ -54,11 +54,13 @@ if not mongo_url or not db_name:
 def encode_mongo_url(url):
     """Encode l'URL MongoDB pour gérer les caractères spéciaux dans le mot de passe"""
     try:
-        # Si l'URL contient déjà des caractères encodés, la retourner telle quelle
-        if '%' in url and ('%40' in url or '%3A' in url):
+        # Si l'URL contient déjà des caractères encodés (%40, %3A, etc.), la retourner telle quelle
+        # Cela signifie que l'utilisateur a déjà encodé l'URL manuellement
+        if '%40' in url or '%3A' in url or '%2F' in url:
+            logging.info("✅ URL MongoDB déjà encodée détectée, utilisation telle quelle")
             return url
         
-        # Parser l'URL
+        # Parser l'URL normalement
         parsed = urlparse(url)
         
         # Si pas d'authentification, retourner telle quelle
@@ -82,7 +84,9 @@ def encode_mongo_url(url):
             encoded_netloc = f"{encoded_username}@{host_part}"
             new_parsed = parsed._replace(netloc=encoded_netloc)
             return urlunparse(new_parsed)
-    except Exception:
+    except Exception as e:
+        logging.error(f"❌ Erreur lors de l'encodage de l'URL MongoDB : {e}")
+        logging.error(f"   URL originale: {url.split('@')[0] + '@***' if '@' in url else url}")
         # En cas d'erreur, retourner l'URL originale
         return url
 
