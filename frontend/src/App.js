@@ -400,8 +400,8 @@ function App() {
   const fetchTimeSlotSettings = async () => {
     try {
       const response = await axios.get(`${API}/time-slots`);
-      console.log("✅ Time slot settings chargés:", response.data);
-      setTimeSlotSettings(response.data);
+      // console.log("✅ Time slot settings chargés:", response.data);
+      // setTimeSlotSettings(response.data);
     } catch (error) {
       console.error("❌ Error fetching time slot settings:", error);
       console.error("⚠️ Utilisation des valeurs par défaut");
@@ -1045,13 +1045,32 @@ function App() {
       let start_time = null;
       let end_time = null;
 
-      // Determine which movie is selected
-      const currentMovie = selectedMovie || (preFillData && preFillData.movie);
-      const currentMovieId = currentMovie ? currentMovie.id : null;
+      // Determine which movie is selected using selectedScheduleId for precision
+      // First, try to find the movie using selectedScheduleId (most precise)
+      let currentMovie = null;
+      let currentMovieId = null;
+
+      if (selectedScheduleId) {
+        const scheduleById = movieSchedules.find(
+          (s) => s.schedule.id === selectedScheduleId
+        );
+        if (scheduleById) {
+          currentMovie = scheduleById.movie || scheduleById.content;
+          currentMovieId = currentMovie?.id;
+        }
+      }
+
+      // Fallback: use selectedMovie or preFillData.movie
+      if (!currentMovie) {
+        currentMovie = selectedMovie || (preFillData && preFillData.movie);
+        currentMovieId = currentMovie ? currentMovie.id : null;
+      }
 
       console.log("🎬 Récupération des horaires pour le film sélectionné:", {
+        selectedScheduleId,
         selectedMovie: selectedMovie?.title,
         preFillDataMovie: preFillData?.movie?.title,
+        currentMovie: currentMovie?.title,
         currentMovieId,
         selectedTimeSlot,
         isPreFilled,
@@ -1074,8 +1093,30 @@ function App() {
           start_time,
           end_time,
         });
+      } else if (selectedScheduleId) {
+        // Priority 2: Find the schedule by ID (most precise method)
+        const scheduleById = movieSchedules.find(
+          (schedule) => schedule.schedule.id === selectedScheduleId
+        );
+
+        if (scheduleById && scheduleById.schedule) {
+          entry_time = scheduleById.schedule.entry_time || null;
+          start_time = scheduleById.schedule.start_time || null;
+          end_time = scheduleById.schedule.end_time || null;
+          console.log(
+            "✅ Horaires récupérés depuis movieSchedules (par schedule ID):",
+            {
+              entry_time,
+              start_time,
+              end_time,
+              scheduleId: selectedScheduleId,
+              movieTitle:
+                scheduleById.movie?.title || scheduleById.content?.title,
+            }
+          );
+        }
       } else if (currentMovieId) {
-        // Priority 2: Find the schedule in movieSchedules that matches BOTH the movie ID and time slot
+        // Priority 3: Find the schedule in movieSchedules that matches BOTH the movie ID and time slot
         const scheduleForMovie = movieSchedules.find(
           (schedule) =>
             schedule.movie &&
@@ -1097,7 +1138,7 @@ function App() {
             }
           );
         } else {
-          // Priority 3: Fallback - find by time_slot only (but log a warning)
+          // Priority 4: Fallback - find by time_slot only (but log a warning)
           const scheduleForSlot = movieSchedules.find(
             (schedule) => schedule.schedule.time_slot === selectedTimeSlot
           );
@@ -1166,17 +1207,21 @@ function App() {
             : getBasePrice(),
         nb_personne: nbPersonne,
         // Add content type and ID for backend to distinguish events from movies
+        // Use currentMovie which is determined by selectedScheduleId for precision
         content_type:
           (preFillData && preFillData.isEvent) ||
-          (selectedMovie && selectedMovie.event_type)
+          (currentMovie && currentMovie.event_type)
             ? "event"
             : "movie",
-        content_id: selectedMovie
-          ? selectedMovie.id
-          : preFillData && preFillData.movie
-          ? preFillData.movie.id
-          : null,
+        content_id: currentMovieId, // Use the movie ID determined from selectedScheduleId
       };
+
+      console.log("📝 Booking data content_id:", {
+        content_id: bookingData.content_id,
+        currentMovieId,
+        currentMovieTitle: currentMovie?.title,
+        selectedScheduleId,
+      });
 
       console.log("📝 Booking data to be sent:", bookingData);
 
