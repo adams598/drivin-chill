@@ -870,6 +870,8 @@ function App() {
     }
 
     // Find the schedule for this time slot in movieSchedules
+    // IMPORTANT: Find the FIRST schedule that matches the time slot
+    // There might be multiple schedules with the same time_slot, but we want the one that matches
     const scheduleForSlot = movieSchedules.find(
       (schedule) => schedule.schedule.time_slot === timeSlot
     );
@@ -880,7 +882,13 @@ function App() {
       const content = scheduleForSlot.content || scheduleForSlot.movie;
       console.log(
         "✅ Found schedule in movieSchedules, setting selectedMovie to:",
-        content
+        {
+          content: content?.title || content,
+          schedule: scheduleForSlot.schedule,
+          entry_time: scheduleForSlot.schedule?.entry_time,
+          start_time: scheduleForSlot.schedule?.start_time,
+          end_time: scheduleForSlot.schedule?.end_time,
+        }
       );
       setSelectedMovie(content);
     } else {
@@ -2336,9 +2344,22 @@ function App() {
                           const scheduleInList = movieSchedules.find(
                             (s) => s.schedule.time_slot === selectedTimeSlot
                           );
-                          // Use preFillData schedule if available, otherwise use the one from the list
+                          // Use preFillData schedule ONLY if it matches the selected time slot
+                          // Otherwise, use the schedule from the list for the selected time slot
                           const schedule =
-                            preFillData?.schedule || scheduleInList?.schedule;
+                            (preFillData?.timeSlot === selectedTimeSlot &&
+                              preFillData?.schedule) ||
+                            scheduleInList?.schedule;
+
+                          console.log("🔍 SelectValue - Schedule selection:", {
+                            selectedTimeSlot,
+                            preFillDataTimeSlot: preFillData?.timeSlot,
+                            usingPreFillData:
+                              preFillData?.timeSlot === selectedTimeSlot &&
+                              preFillData?.schedule,
+                            scheduleFromList: scheduleInList?.schedule,
+                            finalSchedule: schedule,
+                          });
 
                           if (schedule?.entry_time && schedule?.start_time) {
                             return `Entrée: ${schedule.entry_time} • Début: ${
