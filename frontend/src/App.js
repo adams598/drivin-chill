@@ -851,11 +851,35 @@ function App() {
   };
 
   // Handle time slot selection with content info (movie or event)
-  const handleTimeSlotSelect = async (timeSlot) => {
-    console.log("🔄 handleTimeSlotSelect called with timeSlot:", timeSlot);
+  const handleTimeSlotSelect = async (selectedValue) => {
+    console.log("🔄 handleTimeSlotSelect called with value:", selectedValue);
     console.log("📋 Current movieSchedules:", movieSchedules);
     console.log("🎬 Current selectedMovie:", selectedMovie);
     console.log("📦 Current preFillData:", preFillData);
+
+    // The value can be either a schedule ID or a time_slot (for backward compatibility)
+    // First, try to find by schedule ID (new approach)
+    let scheduleForSlot = movieSchedules.find(
+      (schedule) => schedule.schedule.id === selectedValue
+    );
+
+    // If not found by ID, try by time_slot (fallback for pre-filled data)
+    if (!scheduleForSlot) {
+      scheduleForSlot = movieSchedules.find(
+        (schedule) => schedule.schedule.time_slot === selectedValue
+      );
+    }
+
+    // If still not found, use selectedValue as time_slot (legacy)
+    const timeSlot = scheduleForSlot
+      ? scheduleForSlot.schedule.time_slot
+      : selectedValue;
+
+    console.log("🔍 Found schedule:", {
+      selectedValue,
+      scheduleForSlot: scheduleForSlot?.schedule,
+      timeSlot,
+    });
 
     setSelectedTimeSlot(timeSlot);
 
@@ -868,13 +892,6 @@ function App() {
       setSelectedMovie(preFillData.movie);
       return;
     }
-
-    // Find the schedule for this time slot in movieSchedules
-    // IMPORTANT: Find the FIRST schedule that matches the time slot
-    // There might be multiple schedules with the same time_slot, but we want the one that matches
-    const scheduleForSlot = movieSchedules.find(
-      (schedule) => schedule.schedule.time_slot === timeSlot
-    );
 
     if (scheduleForSlot) {
       // For events, the content is in scheduleForSlot.content
@@ -906,10 +923,26 @@ function App() {
           // Update state with fetched schedules
           setMovieSchedules(fetchedSchedules);
 
-          // Try to find in freshly fetched schedules
-          const updatedSchedule = fetchedSchedules.find(
-            (schedule) => schedule.schedule.time_slot === timeSlot
-          );
+          // Try to find in freshly fetched schedules by ID first, then by time_slot
+          let updatedSchedule = null;
+
+          // If selectedValue looks like an ID (UUID format), try to find by ID
+          if (
+            selectedValue &&
+            selectedValue.includes("-") &&
+            selectedValue.length > 20
+          ) {
+            updatedSchedule = fetchedSchedules.find(
+              (schedule) => schedule.schedule.id === selectedValue
+            );
+          }
+
+          // Fallback: find by time_slot
+          if (!updatedSchedule) {
+            updatedSchedule = fetchedSchedules.find(
+              (schedule) => schedule.schedule.time_slot === timeSlot
+            );
+          }
 
           if (updatedSchedule) {
             const content = updatedSchedule.content || updatedSchedule.movie;
@@ -2323,7 +2356,24 @@ function App() {
               <div className="space-y-2">
                 <Label className="text-white">Créneau horaire *</Label>
                 <Select
-                  value={selectedTimeSlot}
+                  value={
+                    // Find the schedule ID for the selected time slot
+                    (() => {
+                      const currentSchedule = movieSchedules.find(
+                        (s) => s.schedule.time_slot === selectedTimeSlot
+                      );
+                      // If we have a pre-filled schedule that matches, use its ID
+                      if (
+                        isPreFilled &&
+                        preFillData?.timeSlot === selectedTimeSlot &&
+                        preFillData?.schedule?.id
+                      ) {
+                        return preFillData.schedule.id;
+                      }
+                      // Otherwise, use the schedule ID from the list
+                      return currentSchedule?.schedule?.id || selectedTimeSlot;
+                    })()
+                  }
                   onValueChange={handleTimeSlotSelect}
                   disabled={!selectedDate}
                 >
@@ -2340,10 +2390,36 @@ function App() {
                       {/* Display the selected time slot with specific schedule info if available */}
                       {selectedTimeSlot &&
                         (() => {
-                          // Try to find the schedule in movieSchedules first
-                          const scheduleInList = movieSchedules.find(
-                            (s) => s.schedule.time_slot === selectedTimeSlot
+                          // Get the current selected value from the Select component
+                          // This should be the schedule ID
+                          const currentSelectValue = (() => {
+                            const currentSchedule = movieSchedules.find(
+                              (s) => s.schedule.time_slot === selectedTimeSlot
+                            );
+                            if (
+                              isPreFilled &&
+                              preFillData?.timeSlot === selectedTimeSlot &&
+                              preFillData?.schedule?.id
+                            ) {
+                              return preFillData.schedule.id;
+                            }
+                            return (
+                              currentSchedule?.schedule?.id || selectedTimeSlot
+                            );
+                          })();
+
+                          // Find the schedule by ID first (more precise)
+                          let scheduleInList = movieSchedules.find(
+                            (s) => s.schedule.id === currentSelectValue
                           );
+
+                          // Fallback: find by time_slot if not found by ID
+                          if (!scheduleInList) {
+                            scheduleInList = movieSchedules.find(
+                              (s) => s.schedule.time_slot === selectedTimeSlot
+                            );
+                          }
+
                           // Use preFillData schedule ONLY if it matches the selected time slot
                           // Otherwise, use the schedule from the list for the selected time slot
                           const schedule =
@@ -2353,6 +2429,7 @@ function App() {
 
                           console.log("🔍 SelectValue - Schedule selection:", {
                             selectedTimeSlot,
+                            currentSelectValue,
                             preFillDataTimeSlot: preFillData?.timeSlot,
                             usingPreFillData:
                               preFillData?.timeSlot === selectedTimeSlot &&
@@ -2401,10 +2478,15 @@ function App() {
                               preFillData.timeSlot &&
                             schedule.movie?.id === preFillData.movie?.id;
 
+                          // Use schedule ID as value to uniquely identify each schedule
+                          // This allows us to distinguish between different movies with the same time_slot
+                          const scheduleValue =
+                            schedule.schedule.id || schedule.schedule.time_slot;
+
                           return (
                             <SelectItem
                               key={schedule.schedule.id}
-                              value={schedule.schedule.time_slot}
+                              value={scheduleValue}
                               className={`text-white hover:bg-gray-700 ${
                                 isBookingClosed ? "opacity-50" : ""
                               } ${
