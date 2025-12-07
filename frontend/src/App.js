@@ -167,6 +167,7 @@ function App() {
   }, []);
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState("");
+  const [selectedScheduleId, setSelectedScheduleId] = useState(null); // Store the selected schedule ID
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState("");
   const [movieSchedules, setMovieSchedules] = useState([]);
   const [selectedMovie, setSelectedMovie] = useState(null);
@@ -560,6 +561,10 @@ function App() {
       isEvent: bookingData.isEvent || false,
       schedule: bookingData.schedule || null, // Inclure le schedule complet pour les horaires réels
     });
+    // Set the schedule ID for precise selection
+    if (bookingData.schedule?.id) {
+      setSelectedScheduleId(bookingData.schedule.id);
+    }
 
     // Load schedules for the selected date
     if (bookingData.isEvent) {
@@ -879,9 +884,12 @@ function App() {
       selectedValue,
       scheduleForSlot: scheduleForSlot?.schedule,
       timeSlot,
+      scheduleId: scheduleForSlot?.schedule?.id,
     });
 
     setSelectedTimeSlot(timeSlot);
+    // Store the schedule ID for precise selection
+    setSelectedScheduleId(scheduleForSlot?.schedule?.id || null);
 
     // First, check if this is the pre-filled time slot
     if (isPreFilled && preFillData && preFillData.timeSlot === timeSlot) {
@@ -951,6 +959,10 @@ function App() {
               content
             );
             setSelectedMovie(content);
+            // Update the schedule ID
+            if (updatedSchedule.schedule?.id) {
+              setSelectedScheduleId(updatedSchedule.schedule.id);
+            }
           } else {
             console.warn(
               `⚠️ No schedule found for time slot ${timeSlot} on ${dateString}`
@@ -2357,7 +2369,8 @@ function App() {
                 <Label className="text-white">Créneau horaire *</Label>
                 <Select
                   value={
-                    // Find the schedule ID for the selected time slot
+                    // Use the stored schedule ID if available, otherwise find it
+                    selectedScheduleId ||
                     (() => {
                       const currentSchedule = movieSchedules.find(
                         (s) => s.schedule.time_slot === selectedTimeSlot
@@ -2390,27 +2403,19 @@ function App() {
                       {/* Display the selected time slot with specific schedule info if available */}
                       {selectedTimeSlot &&
                         (() => {
-                          // Get the current selected value from the Select component
-                          // This should be the schedule ID
-                          const currentSelectValue = (() => {
-                            const currentSchedule = movieSchedules.find(
-                              (s) => s.schedule.time_slot === selectedTimeSlot
-                            );
-                            if (
-                              isPreFilled &&
+                          // Use the stored schedule ID to find the exact schedule
+                          const scheduleIdToUse =
+                            selectedScheduleId ||
+                            (isPreFilled &&
                               preFillData?.timeSlot === selectedTimeSlot &&
-                              preFillData?.schedule?.id
-                            ) {
-                              return preFillData.schedule.id;
-                            }
-                            return (
-                              currentSchedule?.schedule?.id || selectedTimeSlot
-                            );
-                          })();
+                              preFillData?.schedule?.id) ||
+                            movieSchedules.find(
+                              (s) => s.schedule.time_slot === selectedTimeSlot
+                            )?.schedule?.id;
 
-                          // Find the schedule by ID first (more precise)
+                          // Find the schedule by ID first (most precise)
                           let scheduleInList = movieSchedules.find(
-                            (s) => s.schedule.id === currentSelectValue
+                            (s) => s.schedule.id === scheduleIdToUse
                           );
 
                           // Fallback: find by time_slot if not found by ID
@@ -2420,22 +2425,25 @@ function App() {
                             );
                           }
 
-                          // Use preFillData schedule ONLY if it matches the selected time slot
-                          // Otherwise, use the schedule from the list for the selected time slot
+                          // Use preFillData schedule ONLY if it matches the selected time slot AND schedule ID
                           const schedule =
-                            (preFillData?.timeSlot === selectedTimeSlot &&
+                            (isPreFilled &&
+                              preFillData?.timeSlot === selectedTimeSlot &&
+                              preFillData?.schedule?.id === scheduleIdToUse &&
                               preFillData?.schedule) ||
                             scheduleInList?.schedule;
 
                           console.log("🔍 SelectValue - Schedule selection:", {
                             selectedTimeSlot,
-                            currentSelectValue,
+                            selectedScheduleId,
+                            scheduleIdToUse,
                             preFillDataTimeSlot: preFillData?.timeSlot,
-                            usingPreFillData:
-                              preFillData?.timeSlot === selectedTimeSlot &&
-                              preFillData?.schedule,
+                            preFillDataScheduleId: preFillData?.schedule?.id,
                             scheduleFromList: scheduleInList?.schedule,
                             finalSchedule: schedule,
+                            movieTitle:
+                              schedule?.movie?.title ||
+                              scheduleInList?.movie?.title,
                           });
 
                           if (schedule?.entry_time && schedule?.start_time) {
