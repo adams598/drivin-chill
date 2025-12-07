@@ -1490,39 +1490,59 @@ async def create_booking(booking_data: TicketBookingCreate):
         # Create booking object
         # Note: entry_time, start_time, end_time sont maintenant sauvegardés directement dans bookings
         # pour éviter les jointures et garantir la cohérence des données
+        # IMPORTANT: Les valeurs envoyées par le frontend sont prioritaires et ne doivent JAMAIS être remplacées
         booking_dict = booking_data.dict()
         booking_dict["final_price"] = final_price
         if promo_discount_info:
             booking_dict["promo_discount_info"] = promo_discount_info
+        
+        # Log des valeurs reçues depuis le frontend
+        logging.info(f"📥 Horaires reçus depuis le frontend pour la réservation: entry_time={booking_dict.get('entry_time')}, start_time={booking_dict.get('start_time')}, end_time={booking_dict.get('end_time')}, content_id={booking_dict.get('content_id')}, time_slot={booking_dict.get('time_slot')}")
         
         # Sauvegarder content_id et content_type si disponibles depuis le schedule trouvé
         if content_schedule:
             booking_dict["content_type"] = content_schedule.get("content_type", "movie")
             booking_dict["content_id"] = content_schedule.get("content_id")
             # Si entry_time, start_time, end_time ne sont pas fournis dans booking_data,
-            # les récupérer depuis le schedule
+            # les récupérer depuis le schedule (fallback uniquement)
             if not booking_dict.get("entry_time") and content_schedule.get("entry_time"):
+                logging.warning(f"⚠️ entry_time manquant depuis frontend, utilisation du schedule: {content_schedule.get('entry_time')}")
                 booking_dict["entry_time"] = content_schedule.get("entry_time")
             if not booking_dict.get("start_time") and content_schedule.get("start_time"):
+                logging.warning(f"⚠️ start_time manquant depuis frontend, utilisation du schedule: {content_schedule.get('start_time')}")
                 booking_dict["start_time"] = content_schedule.get("start_time")
             if not booking_dict.get("end_time") and content_schedule.get("end_time"):
+                logging.warning(f"⚠️ end_time manquant depuis frontend, utilisation du schedule: {content_schedule.get('end_time')}")
                 booking_dict["end_time"] = content_schedule.get("end_time")
         elif movie_schedule:
             # Pour les movie_schedules legacy, c'est toujours un film
             booking_dict["content_type"] = "movie"
             booking_dict["content_id"] = movie_schedule.get("movie_id")
             # Si entry_time, start_time, end_time ne sont pas fournis dans booking_data,
-            # les récupérer depuis le schedule
+            # les récupérer depuis le schedule (fallback uniquement)
             if not booking_dict.get("entry_time") and movie_schedule.get("entry_time"):
+                logging.warning(f"⚠️ entry_time manquant depuis frontend, utilisation du movie_schedule: {movie_schedule.get('entry_time')}")
                 booking_dict["entry_time"] = movie_schedule.get("entry_time")
             if not booking_dict.get("start_time") and movie_schedule.get("start_time"):
+                logging.warning(f"⚠️ start_time manquant depuis frontend, utilisation du movie_schedule: {movie_schedule.get('start_time')}")
                 booking_dict["start_time"] = movie_schedule.get("start_time")
             if not booking_dict.get("end_time") and movie_schedule.get("end_time"):
+                logging.warning(f"⚠️ end_time manquant depuis frontend, utilisation du movie_schedule: {movie_schedule.get('end_time')}")
                 booking_dict["end_time"] = movie_schedule.get("end_time")
         # Si booking_data contient déjà content_id et content_type, les garder
         elif booking_data.content_id and booking_data.content_type:
             booking_dict["content_type"] = booking_data.content_type
             booking_dict["content_id"] = booking_data.content_id
+        
+        # Validation finale: s'assurer que les horaires sont présents
+        if not booking_dict.get("entry_time") or not booking_dict.get("start_time") or not booking_dict.get("end_time"):
+            logging.error(f"❌ ERREUR: Horaires manquants pour la réservation! entry_time={booking_dict.get('entry_time')}, start_time={booking_dict.get('start_time')}, end_time={booking_dict.get('end_time')}")
+            raise HTTPException(
+                status_code=400,
+                detail="Les horaires du film (entry_time, start_time, end_time) sont requis pour créer une réservation. Veuillez réessayer."
+            )
+        
+        logging.info(f"✅ Horaires finaux pour la réservation: entry_time={booking_dict.get('entry_time')}, start_time={booking_dict.get('start_time')}, end_time={booking_dict.get('end_time')}")
         
         booking_obj = TicketBooking(**booking_dict)
         

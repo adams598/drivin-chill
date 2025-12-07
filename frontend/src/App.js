@@ -986,33 +986,110 @@ function App() {
           ? parseInt(formData.nbPersonneCustom)
           : parseInt(formData.nbPersonne);
 
-      // Get schedule times (entry_time, start_time, end_time) from the selected schedule
+      // Get schedule times (entry_time, start_time, end_time) from the selected movie's schedule
+      // IMPORTANT: Always use the schedule of the selected movie, never generic time_slot values
       let entry_time = null;
       let start_time = null;
       let end_time = null;
 
-      // First, try to get from preFillData if available and matches the selected time slot
+      // Determine which movie is selected
+      const currentMovie = selectedMovie || (preFillData && preFillData.movie);
+      const currentMovieId = currentMovie ? currentMovie.id : null;
+
+      console.log("🎬 Récupération des horaires pour le film sélectionné:", {
+        selectedMovie: selectedMovie?.title,
+        preFillDataMovie: preFillData?.movie?.title,
+        currentMovieId,
+        selectedTimeSlot,
+        isPreFilled,
+      });
+
+      // Priority 1: Get from preFillData if it matches the selected movie and time slot
       if (
         isPreFilled &&
         preFillData &&
-        preFillData.timeSlot === selectedTimeSlot &&
-        preFillData.schedule
+        preFillData.schedule &&
+        preFillData.movie &&
+        preFillData.movie.id === currentMovieId &&
+        preFillData.timeSlot === selectedTimeSlot
       ) {
         entry_time = preFillData.schedule.entry_time || null;
         start_time = preFillData.schedule.start_time || null;
         end_time = preFillData.schedule.end_time || null;
-      } else {
-        // Otherwise, find the schedule in movieSchedules
-        const scheduleForSlot = movieSchedules.find(
-          (schedule) => schedule.schedule.time_slot === selectedTimeSlot
+        console.log("✅ Horaires récupérés depuis preFillData:", {
+          entry_time,
+          start_time,
+          end_time,
+        });
+      } else if (currentMovieId) {
+        // Priority 2: Find the schedule in movieSchedules that matches BOTH the movie ID and time slot
+        const scheduleForMovie = movieSchedules.find(
+          (schedule) =>
+            schedule.movie &&
+            schedule.movie.id === currentMovieId &&
+            schedule.schedule.time_slot === selectedTimeSlot
         );
 
-        if (scheduleForSlot && scheduleForSlot.schedule) {
-          entry_time = scheduleForSlot.schedule.entry_time || null;
-          start_time = scheduleForSlot.schedule.start_time || null;
-          end_time = scheduleForSlot.schedule.end_time || null;
+        if (scheduleForMovie && scheduleForMovie.schedule) {
+          entry_time = scheduleForMovie.schedule.entry_time || null;
+          start_time = scheduleForMovie.schedule.start_time || null;
+          end_time = scheduleForMovie.schedule.end_time || null;
+          console.log(
+            "✅ Horaires récupérés depuis movieSchedules (par film):",
+            {
+              entry_time,
+              start_time,
+              end_time,
+              movieTitle: scheduleForMovie.movie?.title,
+            }
+          );
+        } else {
+          // Priority 3: Fallback - find by time_slot only (but log a warning)
+          const scheduleForSlot = movieSchedules.find(
+            (schedule) => schedule.schedule.time_slot === selectedTimeSlot
+          );
+
+          if (scheduleForSlot && scheduleForSlot.schedule) {
+            entry_time = scheduleForSlot.schedule.entry_time || null;
+            start_time = scheduleForSlot.schedule.start_time || null;
+            end_time = scheduleForSlot.schedule.end_time || null;
+            console.warn(
+              "⚠️ Horaires récupérés par time_slot uniquement (film non trouvé):",
+              {
+                entry_time,
+                start_time,
+                end_time,
+                selectedMovieId: currentMovieId,
+                foundMovieId: scheduleForSlot.movie?.id,
+              }
+            );
+          }
         }
       }
+
+      // Final validation: ensure we have the required times
+      if (!entry_time || !start_time || !end_time) {
+        console.error("❌ ERREUR: Horaires manquants pour la réservation!", {
+          entry_time,
+          start_time,
+          end_time,
+          currentMovieId,
+          selectedTimeSlot,
+          movieSchedulesCount: movieSchedules.length,
+        });
+        toast.error(
+          "Erreur: Impossible de récupérer les horaires du film. Veuillez réessayer."
+        );
+        setIsSubmitting(false);
+        return;
+      }
+
+      console.log("✅ Horaires finaux pour la réservation:", {
+        entry_time,
+        start_time,
+        end_time,
+        movieTitle: currentMovie?.title,
+      });
 
       // First create the booking
       const bookingData = {
