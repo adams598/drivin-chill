@@ -909,13 +909,28 @@ function App() {
         "✅ Found schedule in movieSchedules, setting selectedMovie to:",
         {
           content: content?.title || content,
+          contentId: content?.id,
           schedule: scheduleForSlot.schedule,
+          scheduleId: scheduleForSlot.schedule?.id,
           entry_time: scheduleForSlot.schedule?.entry_time,
           start_time: scheduleForSlot.schedule?.start_time,
           end_time: scheduleForSlot.schedule?.end_time,
         }
       );
       setSelectedMovie(content);
+      // IMPORTANT: Update selectedScheduleId with the schedule ID
+      if (scheduleForSlot.schedule?.id) {
+        console.log(
+          "✅ Setting selectedScheduleId to:",
+          scheduleForSlot.schedule.id
+        );
+        setSelectedScheduleId(scheduleForSlot.schedule.id);
+      } else {
+        console.warn(
+          "⚠️ Schedule found but no ID available:",
+          scheduleForSlot.schedule
+        );
+      }
     } else {
       // If not found in current schedules, try to fetch schedules again for the selected date
       if (selectedDate) {
@@ -956,12 +971,25 @@ function App() {
             const content = updatedSchedule.content || updatedSchedule.movie;
             console.log(
               "✅ Found schedule after fetch, setting selectedMovie to:",
-              content
+              {
+                content: content?.title || content,
+                contentId: content?.id,
+                scheduleId: updatedSchedule.schedule?.id,
+              }
             );
             setSelectedMovie(content);
             // Update the schedule ID
             if (updatedSchedule.schedule?.id) {
+              console.log(
+                "✅ Setting selectedScheduleId to:",
+                updatedSchedule.schedule.id
+              );
               setSelectedScheduleId(updatedSchedule.schedule.id);
+            } else {
+              console.warn(
+                "⚠️ Schedule found after fetch but no ID available:",
+                updatedSchedule.schedule
+              );
             }
           } else {
             console.warn(
@@ -1050,20 +1078,102 @@ function App() {
       let currentMovie = null;
       let currentMovieId = null;
 
+      console.log("🔍 DEBUG - Recherche du film sélectionné:", {
+        selectedScheduleId,
+        movieSchedulesCount: movieSchedules.length,
+        movieSchedules: movieSchedules.map((s) => ({
+          scheduleId: s.schedule?.id,
+          timeSlot: s.schedule?.time_slot,
+          movieId: s.movie?.id,
+          movieTitle: s.movie?.title,
+          contentId: s.content?.id,
+          contentTitle: s.content?.title,
+        })),
+        selectedMovie: selectedMovie
+          ? {
+              id: selectedMovie.id,
+              title: selectedMovie.title,
+            }
+          : null,
+        preFillDataMovie: preFillData?.movie
+          ? {
+              id: preFillData.movie.id,
+              title: preFillData.movie.title,
+            }
+          : null,
+      });
+
       if (selectedScheduleId) {
         const scheduleById = movieSchedules.find(
           (s) => s.schedule.id === selectedScheduleId
         );
+
+        console.log("🔍 DEBUG - Recherche par selectedScheduleId:", {
+          selectedScheduleId,
+          scheduleById: scheduleById
+            ? {
+                scheduleId: scheduleById.schedule?.id,
+                movieId: scheduleById.movie?.id,
+                movieTitle: scheduleById.movie?.title,
+                contentId: scheduleById.content?.id,
+                contentTitle: scheduleById.content?.title,
+              }
+            : null,
+        });
+
         if (scheduleById) {
           currentMovie = scheduleById.movie || scheduleById.content;
           currentMovieId = currentMovie?.id;
+
+          // Fallback: try to get content_id from schedule if movie/content doesn't have id
+          if (!currentMovieId && scheduleById.schedule) {
+            // Check if schedule has content_id
+            if (scheduleById.schedule.content_id) {
+              currentMovieId = scheduleById.schedule.content_id;
+              console.log(
+                "✅ DEBUG - Utilisation de content_id depuis schedule:",
+                currentMovieId
+              );
+            }
+            // Check if schedule has movie_id (legacy)
+            else if (scheduleById.schedule.movie_id) {
+              currentMovieId = scheduleById.schedule.movie_id;
+              console.log(
+                "✅ DEBUG - Utilisation de movie_id depuis schedule:",
+                currentMovieId
+              );
+            }
+          }
+
+          console.log("✅ DEBUG - Film trouvé via selectedScheduleId:", {
+            currentMovieId,
+            currentMovieTitle: currentMovie?.title,
+            scheduleContentId: scheduleById.schedule?.content_id,
+            scheduleMovieId: scheduleById.schedule?.movie_id,
+          });
+        } else {
+          console.warn(
+            "⚠️ DEBUG - Schedule non trouvé avec selectedScheduleId:",
+            selectedScheduleId
+          );
         }
+      } else {
+        console.warn("⚠️ DEBUG - selectedScheduleId est null ou undefined");
       }
 
       // Fallback: use selectedMovie or preFillData.movie
       if (!currentMovie) {
+        console.log(
+          "🔄 DEBUG - Utilisation du fallback (selectedMovie ou preFillData.movie)"
+        );
         currentMovie = selectedMovie || (preFillData && preFillData.movie);
         currentMovieId = currentMovie ? currentMovie.id : null;
+
+        console.log("✅ DEBUG - Film trouvé via fallback:", {
+          currentMovieId,
+          currentMovieTitle: currentMovie?.title,
+          source: selectedMovie ? "selectedMovie" : "preFillData.movie",
+        });
       }
 
       console.log("🎬 Récupération des horaires pour le film sélectionné:", {
@@ -1088,11 +1198,6 @@ function App() {
         entry_time = preFillData.schedule.entry_time || null;
         start_time = preFillData.schedule.start_time || null;
         end_time = preFillData.schedule.end_time || null;
-        console.log("✅ Horaires récupérés depuis preFillData:", {
-          entry_time,
-          start_time,
-          end_time,
-        });
       } else if (selectedScheduleId) {
         // Priority 2: Find the schedule by ID (most precise method)
         const scheduleById = movieSchedules.find(
