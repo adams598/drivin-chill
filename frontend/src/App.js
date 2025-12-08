@@ -2584,7 +2584,8 @@ function App() {
                               preFillData?.schedule) ||
                             scheduleInList?.schedule;
 
-                          {/* console.log("🔍 SelectValue - Schedule selection:", {
+                          {
+                            /* console.log("🔍 SelectValue - Schedule selection:", {
                             selectedTimeSlot,
                             selectedScheduleId,
                             scheduleIdToUse,
@@ -2595,7 +2596,8 @@ function App() {
                             movieTitle:
                               schedule?.movie?.title ||
                               scheduleInList?.movie?.title,
-                          }); */}
+                          }); */
+                          }
 
                           if (schedule?.entry_time && schedule?.start_time) {
                             return `Entrée: ${schedule.entry_time} • Début: ${

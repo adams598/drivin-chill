@@ -897,6 +897,7 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
     logging.info(f"📧 email_enabled = {email_enabled}")
     
     # Récupérer les informations du film et du schedule
+    # IMPORTANT: Utiliser directement les données sauvegardées dans le booking
     movie_title = "Film à confirmer"
     entry_time = None
     start_time = None
@@ -910,56 +911,84 @@ async def send_confirmation_email(booking: TicketBooking, qr_code: str, max_retr
         # Récupérer le booking depuis la base de données pour avoir toutes les infos à jour
         booking_db = await db.bookings.find_one({"id": booking.id})
         if booking_db:
-            # Utiliser les données de la DB pour avoir les infos complètes
+            # PRIORITÉ 1: Utiliser les données directement depuis le booking (les plus précises)
+            entry_time = booking_db.get("entry_time") or booking.entry_time if hasattr(booking, 'entry_time') else None
+            start_time = booking_db.get("start_time") or booking.start_time if hasattr(booking, 'start_time') else None
+            end_time = booking_db.get("end_time") or booking.end_time if hasattr(booking, 'end_time') else None
             booking_final_price = booking_db.get("final_price") or booking.price
             booking_promo_code = booking_db.get("promo_code") or booking.promo_code
             booking_promo_discount_info = booking_db.get("promo_discount_info")
+            
+            # Récupérer le titre du film via content_id depuis le booking
+            content_id = booking_db.get("content_id") or (booking.content_id if hasattr(booking, 'content_id') else None)
+            content_type = booking_db.get("content_type") or (booking.content_type if hasattr(booking, 'content_type') else "movie")
+            
+            logging.info(f"📧 Données depuis booking: entry_time={entry_time}, start_time={start_time}, end_time={end_time}, content_id={content_id}, content_type={content_type}")
+            
+            if content_id:
+                # Récupérer le titre depuis la table movies ou events selon content_type
+                if content_type == "movie":
+                    movie = await db.movies.find_one({"id": content_id, "is_active": True})
+                    if not movie:
+                        movie = await db.movies.find_one({"id": content_id})
+                    if movie:
+                        movie_title = movie.get("title", "Film à confirmer")
+                        logging.info(f"📧 Film trouvé via content_id: {movie_title}")
+                elif content_type == "event":
+                    event = await db.events.find_one({"id": content_id, "is_active": True})
+                    if not event:
+                        event = await db.events.find_one({"id": content_id})
+                    if event:
+                        movie_title = event.get("title", "Événement à confirmer")
+                        logging.info(f"📧 Événement trouvé via content_id: {movie_title}")
         
-        # Récupérer le schedule pour obtenir les informations du film
-        # Essayer avec la date en format ISO string
-        booking_date_str = booking.booking_date.isoformat() if isinstance(booking.booking_date, date) else str(booking.booking_date)
-        time_slot_str = str(booking.time_slot)
-        
-        # Essayer plusieurs variantes de recherche
-        schedule = await db.movie_schedules.find_one({
-            "date": booking_date_str,
-            "time_slot": time_slot_str,
-            "is_active": True
-        })
-        
-        # Si pas trouvé, essayer avec le format date object
-        if not schedule:
-            schedule = await db.movie_schedules.find_one({
-                "date": booking.booking_date,
-                "time_slot": booking.time_slot,
-                "is_active": True
-            })
-        
-        # Si toujours pas trouvé, essayer avec time_slot en valeur brute
-        if not schedule:
+        # FALLBACK: Si les horaires ne sont pas dans le booking, chercher dans les schedules
+        if not entry_time or not start_time or not end_time:
+            logging.info(f"📧 Horaires manquants dans booking, recherche dans les schedules (fallback)")
+            booking_date_str = booking.booking_date.isoformat() if isinstance(booking.booking_date, date) else str(booking.booking_date)
+            time_slot_str = str(booking.time_slot)
+            
+            # Essayer plusieurs variantes de recherche
             schedule = await db.movie_schedules.find_one({
                 "date": booking_date_str,
-                "time_slot": {"$in": [time_slot_str, booking.time_slot, str(booking.time_slot).lower(), str(booking.time_slot).upper()]},
+                "time_slot": time_slot_str,
                 "is_active": True
             })
-        
-        logging.info(f"📧 Schedule trouvé: {schedule is not None}, date: {booking_date_str}, time_slot: {time_slot_str}")
-        
-        if schedule:
-            # Récupérer les heures depuis le schedule
-            entry_time = schedule.get("entry_time")
-            start_time = schedule.get("start_time")
-            end_time = schedule.get("end_time")
             
-            logging.info(f"📧 Horaires depuis schedule: entry={entry_time}, start={start_time}, end={end_time}")
+            # Si pas trouvé, essayer avec le format date object
+            if not schedule:
+                schedule = await db.movie_schedules.find_one({
+                    "date": booking.booking_date,
+                    "time_slot": booking.time_slot,
+                    "is_active": True
+                })
             
-            # Récupérer le film
-            movie = await db.movies.find_one({"id": schedule.get("movie_id")})
-            if movie:
-                movie_title = movie.get("title", "Film à confirmer")
-                logging.info(f"📧 Film trouvé: {movie_title}")
+            # Si toujours pas trouvé, essayer avec time_slot en valeur brute
+            if not schedule:
+                schedule = await db.movie_schedules.find_one({
+                    "date": booking_date_str,
+                    "time_slot": {"$in": [time_slot_str, booking.time_slot, str(booking.time_slot).lower(), str(booking.time_slot).upper()]},
+                    "is_active": True
+                })
+            
+            logging.info(f"📧 Schedule trouvé (fallback): {schedule is not None}, date: {booking_date_str}, time_slot: {time_slot_str}")
+            
+            if schedule:
+                # Récupérer les heures depuis le schedule (fallback uniquement)
+                entry_time = entry_time or schedule.get("entry_time")
+                start_time = start_time or schedule.get("start_time")
+                end_time = end_time or schedule.get("end_time")
+                
+                logging.info(f"📧 Horaires depuis schedule (fallback): entry={entry_time}, start={start_time}, end={end_time}")
+                
+                # Récupérer le film depuis le schedule si pas encore trouvé
+                if movie_title == "Film à confirmer":
+                    movie = await db.movies.find_one({"id": schedule.get("movie_id")})
+                    if movie:
+                        movie_title = movie.get("title", "Film à confirmer")
+                        logging.info(f"📧 Film trouvé via schedule (fallback): {movie_title}")
         
-        # Si les horaires ne sont pas dans le schedule, utiliser TimeSlotSettings comme fallback
+        # FALLBACK FINAL: Si les horaires ne sont toujours pas trouvés, utiliser TimeSlotSettings
         if not entry_time or not start_time or not end_time:
             logging.info(f"📧 Horaires manquants dans schedule, utilisation de TimeSlotSettings comme fallback")
             try:
