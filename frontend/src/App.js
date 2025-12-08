@@ -1288,6 +1288,7 @@ function App() {
         start_time,
         end_time,
         movieTitle: currentMovie?.title,
+        content_id: bookingData.content_id,
       });
 
       // First create the booking
@@ -1321,12 +1322,12 @@ function App() {
         content_id: currentMovieId, // Use the movie ID determined from selectedScheduleId
       };
 
-      console.log("📝 Booking data content_id:", {
-        content_id: bookingData.content_id,
-        currentMovieId,
-        currentMovieTitle: currentMovie?.title,
-        selectedScheduleId,
-      });
+      // console.log("📝 Booking data content_id:", {
+      //   content_id: bookingData.content_id,
+      //   currentMovieId,
+      //   currentMovieTitle: currentMovie?.title,
+      //   selectedScheduleId,
+      // });
 
       console.log("📝 Booking data to be sent:", bookingData);
 
@@ -2583,7 +2584,7 @@ function App() {
                               preFillData?.schedule) ||
                             scheduleInList?.schedule;
 
-                          console.log("🔍 SelectValue - Schedule selection:", {
+                          {/* console.log("🔍 SelectValue - Schedule selection:", {
                             selectedTimeSlot,
                             selectedScheduleId,
                             scheduleIdToUse,
@@ -2594,7 +2595,7 @@ function App() {
                             movieTitle:
                               schedule?.movie?.title ||
                               scheduleInList?.movie?.title,
-                          });
+                          }); */}
 
                           if (schedule?.entry_time && schedule?.start_time) {
                             return `Entrée: ${schedule.entry_time} • Début: ${
