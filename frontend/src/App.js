@@ -1283,14 +1283,6 @@ function App() {
         return;
       }
 
-      console.log("✅ Horaires finaux pour la réservation:", {
-        entry_time,
-        start_time,
-        end_time,
-        movieTitle: currentMovie?.title,
-        content_id: bookingData.content_id,
-      });
-
       // First create the booking
       const bookingData = {
         first_name: formData.firstName.trim(),
@@ -1321,6 +1313,14 @@ function App() {
             : "movie",
         content_id: currentMovieId, // Use the movie ID determined from selectedScheduleId
       };
+
+      console.log("✅ Horaires finaux pour la réservation:", {
+        entry_time,
+        start_time,
+        end_time,
+        movieTitle: currentMovie?.title,
+        content_id: bookingData.content_id,
+      });
 
       // console.log("📝 Booking data content_id:", {
       //   content_id: bookingData.content_id,
